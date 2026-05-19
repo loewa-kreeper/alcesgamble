@@ -61,7 +61,7 @@ const supabaseClient = window.supabase && supabaseConfig.url && !supabaseConfig.
   : null;
 
 const authState = {
-  user: null,
+  account: null,
   loadingWallet: false,
   walletLoaded: false,
 };
@@ -542,14 +542,14 @@ function setAuthMessage(message) {
 }
 
 function renderAuthPanel() {
-  const signedIn = Boolean(authState.user);
+  const signedIn = Boolean(authState.account);
   authForm.classList.toggle("hidden", signedIn);
   accountCard.classList.toggle("hidden", !signedIn);
   addFundsButton.disabled = authState.loadingWallet;
   fundsInput.disabled = authState.loadingWallet;
 
   if (signedIn) {
-    accountName.textContent = getDisplayUsername(authState.user);
+    accountName.textContent = authState.account.username;
   }
 }
 
@@ -563,14 +563,9 @@ async function signUpWithUsername() {
   if (!credentials) return;
 
   setAuthMessage("Creating account...");
-  const { data, error } = await supabaseClient.auth.signUp({
-    email: credentials.email,
-    password: credentials.password,
-    options: {
-      data: {
-        username: credentials.username,
-      },
-    },
+  const { data, error } = await supabaseClient.rpc("create_player_account", {
+    p_username: credentials.username,
+    p_password: credentials.password,
   });
 
   if (error) {
@@ -578,11 +573,7 @@ async function signUpWithUsername() {
     return;
   }
 
-  if (data.session) {
-    setAuthMessage("Account ready. Wallet is saved.");
-  } else {
-    setAuthMessage("Turn off Confirm email in Supabase Auth so username signup can log in.");
-  }
+  handleAccount(data && data[0], credentials.password, "Account ready. Wallet is saved.");
 }
 
 async function signInWithUsername() {
@@ -595,21 +586,28 @@ async function signInWithUsername() {
   if (!credentials) return;
 
   setAuthMessage("Logging in...");
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email: credentials.email,
-    password: credentials.password,
+  const { data, error } = await supabaseClient.rpc("login_player_account", {
+    p_username: credentials.username,
+    p_password: credentials.password,
   });
 
-  if (error) setAuthMessage(error.message);
+  if (error) {
+    setAuthMessage(error.message);
+    return;
+  }
+
+  handleAccount(data && data[0], credentials.password, "Wallet loaded.");
 }
 
 async function signOut() {
   if (!hasSupabase()) return;
   await flushWalletSave();
-  const { error } = await supabaseClient.auth.signOut({ scope: "local" });
-  if (error) {
-    setAuthMessage(error.message);
-  }
+  authState.account = null;
+  authState.walletLoaded = false;
+  lastSavedWallet = null;
+  authPassword.value = "";
+  setAuthMessage("Logged out. Wallet changes are local only.");
+  render();
 }
 
 function getAuthCredentials() {
@@ -638,24 +636,12 @@ function getAuthCredentials() {
 
   return {
     username,
-    email: usernameToEmail(username),
     password,
   };
 }
 
 function normalizeUsername(value) {
   return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
-}
-
-function usernameToEmail(username) {
-  return `${username}@alcesgamble.local`;
-}
-
-function getDisplayUsername(user) {
-  if (!user) return "Account";
-  if (user.user_metadata && user.user_metadata.username) return user.user_metadata.username;
-  const emailName = (user.email || "").split("@")[0];
-  return emailName || "Account";
 }
 
 async function initializeAuth() {
@@ -665,72 +651,32 @@ async function initializeAuth() {
     return;
   }
 
-  const { data } = await supabaseClient.auth.getSession();
-  await handleSession(data.session);
-
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
-    handleSession(session);
-  });
-}
-
-async function handleSession(session) {
-  authState.user = session ? session.user : null;
-  authState.walletLoaded = false;
-
-  if (!authState.user) {
-    lastSavedWallet = null;
-    setAuthMessage("Logged out. Wallet changes are local only.");
-    render();
-    return;
-  }
-
-  authPassword.value = "";
-  setAuthMessage("Loading wallet...");
-  await loadWallet();
-}
-
-async function loadWallet() {
-  if (!authState.user || !hasSupabase()) return;
-
-  authState.loadingWallet = true;
+  setAuthMessage("Log in or sign up to sync your wallet.");
   renderAuthPanel();
+}
 
-  const { data, error } = await supabaseClient
-    .from("wallets")
-    .select("balance")
-    .eq("user_id", authState.user.id)
-    .maybeSingle();
-
-  if (error) {
-    setAuthMessage(`Wallet load failed: ${error.message}`);
-    authState.loadingWallet = false;
-    render();
+function handleAccount(account, password, message) {
+  if (!account) {
+    setAuthMessage("Wrong username or password.");
     return;
   }
 
-  const balance = data ? Number(data.balance) : state.wallet;
-  if (!data) {
-    const { error: insertError } = await supabaseClient
-      .from("wallets")
-      .insert({ user_id: authState.user.id, balance });
-    if (insertError) {
-      setAuthMessage(`Wallet setup failed: ${insertError.message}`);
-      authState.loadingWallet = false;
-      render();
-      return;
-    }
-  }
-
-  setWallet(balance, false);
+  authState.account = {
+    id: account.account_id,
+    username: account.username,
+    password,
+  };
+  authPassword.value = "";
+  setWallet(Number(account.balance) || 0, false);
   lastSavedWallet = state.wallet;
   authState.walletLoaded = true;
   authState.loadingWallet = false;
-  setAuthMessage("Wallet synced.");
+  setAuthMessage(message);
   render();
 }
 
 function queueWalletSave() {
-  if (!authState.user || !authState.walletLoaded || authState.loadingWallet || !hasSupabase()) return;
+  if (!authState.account || !authState.walletLoaded || authState.loadingWallet || !hasSupabase()) return;
   if (walletSaveTimer) clearTimeout(walletSaveTimer);
   walletSaveTimer = window.setTimeout(() => {
     walletSaveTimer = null;
@@ -747,24 +693,22 @@ async function flushWalletSave() {
 }
 
 async function saveWallet() {
-  if (!authState.user || !authState.walletLoaded || !hasSupabase()) return;
+  if (!authState.account || !authState.walletLoaded || !hasSupabase()) return;
   if (lastSavedWallet === state.wallet) return;
 
   const balance = state.wallet;
-  const { error } = await supabaseClient
-    .from("wallets")
-    .upsert({
-      user_id: authState.user.id,
-      balance,
-      updated_at: new Date().toISOString(),
-    });
+  const { data, error } = await supabaseClient.rpc("save_player_wallet", {
+    p_username: authState.account.username,
+    p_password: authState.account.password,
+    p_balance: balance,
+  });
 
   if (error) {
     setAuthMessage(`Wallet save failed: ${error.message}`);
     return;
   }
 
-  lastSavedWallet = balance;
+  lastSavedWallet = Number(data);
   setAuthMessage("Wallet synced.");
 }
 
