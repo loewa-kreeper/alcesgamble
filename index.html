@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gamblers</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="brand-mark">Gamblers</p>
+          <h1 class="brand-title">Roulette Room</h1>
+        </div>
+        <div class="wallet-panel">
+          <div>
+            <p class="wallet-label">Wallet</p>
+            <p class="wallet-value" id="wallet-balance">$0.00</p>
+          </div>
+          <label class="funds-control">
+            <span>Test funds</span>
+            <input id="funds-input" type="number" min="1" step="1" value="100">
+          </label>
+          <button id="add-funds-btn" class="action-button accent">Add funds</button>
+        </div>
+      </header>
+
+      <main id="app-view" class="app-view"></main>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
