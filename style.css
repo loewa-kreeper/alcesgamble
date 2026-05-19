@@ -329,13 +329,11 @@ input {
   gap: 10px;
   background:
     linear-gradient(180deg, rgba(31, 83, 50, 0.95), rgba(18, 48, 31, 0.95)),
-    repeating-linear-gradient(
-      90deg,
+    repeating-linear-gradient(90deg,
       rgba(255, 255, 255, 0.04),
       rgba(255, 255, 255, 0.04) 3px,
       transparent 3px,
-      transparent 12px
-    );
+      transparent 12px);
 }
 
 .slots-menu-reel {
@@ -613,11 +611,13 @@ input {
 }
 
 @keyframes resultPulse {
+
   0%,
   100% {
     transform: scale(1);
     opacity: 0.9;
   }
+
   50% {
     transform: scale(1.015);
     opacity: 1;
@@ -625,11 +625,13 @@ input {
 }
 
 @keyframes slotFlash {
+
   0%,
   100% {
     filter: brightness(1);
     transform: translateY(0);
   }
+
   50% {
     filter: brightness(1.05);
     transform: translateY(2px);
@@ -640,6 +642,7 @@ input {
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }
@@ -727,6 +730,7 @@ input {
   font-weight: 800;
   letter-spacing: 0;
   user-select: none;
+  touch-action: none;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
 }
 
@@ -758,6 +762,7 @@ input {
   z-index: 99;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  touch-action: none;
 }
 
 .chip-1 {
@@ -948,13 +953,33 @@ input {
   animation: slotFlash 180ms steps(2) infinite;
 }
 
-.symbol-cherry { color: #a12b35; }
-.symbol-lemon { color: #8b6a12; }
-.symbol-clover { color: #1f7548; }
-.symbol-bell { color: #9a651a; }
-.symbol-diamond { color: #2f6f93; }
-.symbol-treasure { color: #8f5b13; }
-.symbol-seven { color: #a12b35; }
+.symbol-cherry {
+  color: #a12b35;
+}
+
+.symbol-lemon {
+  color: #8b6a12;
+}
+
+.symbol-clover {
+  color: #1f7548;
+}
+
+.symbol-bell {
+  color: #9a651a;
+}
+
+.symbol-diamond {
+  color: #2f6f93;
+}
+
+.symbol-treasure {
+  color: #8f5b13;
+}
+
+.symbol-seven {
+  color: #a12b35;
+}
 
 .slot-bet-pot {
   position: relative;
@@ -1019,13 +1044,11 @@ input {
   border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.02)),
-    repeating-linear-gradient(
-      0deg,
+    repeating-linear-gradient(0deg,
       rgba(255, 255, 255, 0.015),
       rgba(255, 255, 255, 0.015) 6px,
       rgba(0, 0, 0, 0.02) 6px,
-      rgba(0, 0, 0, 0.02) 12px
-    ),
+      rgba(0, 0, 0, 0.02) 12px),
     linear-gradient(180deg, #257639, #1b582c);
   image-rendering: pixelated;
 }
@@ -1177,87 +1200,80 @@ input {
 }
 
 .joku-felt {
-  min-height: 460px;
-  padding: 28px;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: 22px;
-  border: 6px solid rgba(155, 101, 44, 0.58);
+  min-height: 600px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  border: 6px solid rgba(80, 110, 140, 0.6);
   border-radius: 12px;
   background:
-    radial-gradient(circle at 50% 18%, rgba(221, 182, 110, 0.15), transparent 30%),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.018),
-      rgba(255, 255, 255, 0.018) 8px,
-      rgba(0, 0, 0, 0.018) 8px,
-      rgba(0, 0, 0, 0.018) 16px
-    ),
-    linear-gradient(180deg, #286a43, #153f2d);
-  image-rendering: pixelated;
+    radial-gradient(circle at 50% 18%, rgba(110, 160, 221, 0.15), transparent 30%),
+    repeating-linear-gradient(90deg,
+      rgba(255, 255, 255, 0.012),
+      rgba(255, 255, 255, 0.012) 8px,
+      rgba(0, 0, 0, 0.012) 8px,
+      rgba(0, 0, 0, 0.012) 16px),
+    linear-gradient(180deg, #1a2a3a, #0b141d);
+  image-rendering: auto;
 }
 
-.joku-title-block {
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  text-align: center;
-}
-
-.joku-title-block strong {
-  font-family: "Baskerville Old Face", "Book Antiqua", Georgia, serif;
-  font-size: clamp(42px, 7vw, 82px);
-  line-height: 0.9;
-}
-
-.joku-paytable {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.joku-paytable div {
-  min-height: 58px;
-  padding: 8px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  border: 2px solid rgba(245, 234, 210, 0.13);
-  border-radius: 6px;
-  background: rgba(7, 16, 14, 0.28);
-  text-align: center;
-}
-
-.joku-paytable div.active {
-  border-color: rgba(221, 182, 110, 0.85);
-  background: rgba(221, 182, 110, 0.18);
-}
-
-.joku-paytable span {
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.joku-paytable strong {
-  font-size: 18px;
-}
-
-.joku-hand {
-  min-height: 150px;
+.joku-slots {
   display: flex;
-  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  min-height: 122px;
+  min-width: min(410px, 100%);
   justify-content: center;
-  gap: 16px;
+  align-items: center;
+  border: 2px dashed rgba(255, 255, 255, 0.1);
 }
 
-.joku-hand.drawing .playing-card {
-  animation: cardPulse 260ms ease-in-out infinite alternate;
+.joku-grid-container {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+}
+
+.joku-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+.joku-grid-card {
+  padding: 0;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+  background: #1a1a1a;
+  touch-action: manipulation;
+}
+
+.joku-grid-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.joku-grid-card.selected {
+  border-color: #ffd700;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+  transform: scale(1.05);
+  z-index: 2;
+  background: #fff7df !important;
+}
+
+.joku-grid-card.selected .card-face {
+  filter: brightness(1.1);
 }
 
 .joku-controls {
   display: flex;
   justify-content: center;
+  width: 100%;
 }
 
 .joku-free-note {
@@ -1276,6 +1292,7 @@ input {
   from {
     transform: translateY(0);
   }
+
   to {
     transform: translateY(-6px);
   }
@@ -1431,11 +1448,20 @@ input {
   }
 
   .joku-felt {
-    padding: 18px;
+    padding: 14px;
+    gap: 20px;
   }
 
-  .joku-paytable {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .joku-slots {
+    min-width: unset;
+    width: 100%;
+    gap: 8px;
+    padding: 8px;
+    min-height: 100px;
+  }
+
+  .joku-grid {
+    gap: 6px;
   }
 
   .blackjack-pot {
@@ -1456,4 +1482,20 @@ input {
   .result-board {
     width: 100%;
   }
+}
+@keyframes cardFallIn {
+  from { transform: translateY(-120%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes cardPopOut {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.5; }
+  100% { transform: scale(0); opacity: 0; }
+}
+.joku-grid-card.falling {
+  animation: cardFallIn 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation-delay: calc(var(--col-delay) * 0.06s);
+}
+.joku-felt.refilling .joku-grid-card.falling {
+  animation: cardPopOut 0.4s ease-in forwards;
 }

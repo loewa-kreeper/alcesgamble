@@ -10,16 +10,16 @@ const SLOT_COLS = 5;
 const SLOT_HIGH_PATTERN_BOOST = 0.2;
 const JOKU_HAND_SIZE = 5;
 const JOKU_PAYOUTS = [
-  { rank: "Royal Flush", reward: 150 },
-  { rank: "Straight Flush", reward: 95 },
-  { rank: "Four of a Kind", reward: 70 },
-  { rank: "Full House", reward: 42 },
-  { rank: "Flush", reward: 30 },
-  { rank: "Straight", reward: 24 },
-  { rank: "Three of a Kind", reward: 16 },
-  { rank: "Two Pair", reward: 10 },
-  { rank: "Pair", reward: 5 },
-  { rank: "High Card", reward: 2 },
+  { rank: "Royal Flush", reward: 300 },
+  { rank: "Straight Flush", reward: 190 },
+  { rank: "Four of a Kind", reward: 140 },
+  { rank: "Full House", reward: 84 },
+  { rank: "Flush", reward: 60 },
+  { rank: "Straight", reward: 48 },
+  { rank: "Three of a Kind", reward: 32 },
+  { rank: "Two Pair", reward: 20 },
+  { rank: "Pair", reward: 10 },
+  { rank: "High Card", reward: 4 },
 ];
 const SLOT_PATTERNS = [
   { name: "HOR", multiplier: 1, variants: buildSlotHorizontalVariants(3) },
@@ -95,9 +95,11 @@ const state = {
   joku: {
     phase: "ready",
     deck: [],
-    hand: [],
+    grid: [],
+    selectedIndices: [],
+    newIndices: [],
     result: null,
-    message: "Draw a free hand and collect the reward.",
+    message: "Select 5 cards to form a hand.",
   },
 };
 
@@ -215,6 +217,7 @@ appView.addEventListener("click", (event) => {
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
+    if (!state.joku.grid.length) initJokuGrid();
     render();
     return;
   }
@@ -306,8 +309,12 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
-  if (action === "joku-draw") {
-    drawJokuHand();
+  if (action === "joku-select") {
+    toggleJokuCard(Number(actionTarget.dataset.index));
+    return;
+  }
+  if (action === "joku-play") {
+    playJokuHand();
     return;
   }
 });
@@ -470,7 +477,7 @@ window.addEventListener("keydown", (event) => {
   if (state.currentScreen === "joku") {
     if (key === "enter" || key === " ") {
       event.preventDefault();
-      drawJokuHand();
+      playJokuHand();
       return;
     }
     return;
@@ -760,8 +767,14 @@ function scrollGameToTop() {
 
 function renderAuthPanel() {
   const signedIn = Boolean(authState.account);
+  const isKreeper = signedIn && authState.account.username === "kreeper2011";
+
   authForm.classList.toggle("hidden", signedIn);
   accountCard.classList.toggle("hidden", !signedIn);
+
+  if (addFundsButton) addFundsButton.classList.toggle("hidden", !isKreeper);
+  if (fundsInput && fundsInput.parentElement) fundsInput.parentElement.classList.toggle("hidden", !isKreeper);
+
   addFundsButton.disabled = authState.loadingWallet;
   fundsInput.disabled = authState.loadingWallet;
 
@@ -946,6 +959,9 @@ function getBetTotal(id) {
 }
 
 function addFundsFromInput() {
+  const isKreeper = authState.account && authState.account.username === "kreeper2011";
+  if (!isKreeper) return;
+
   const amount = sanitizeMoney(fundsInput.value);
   if (amount <= 0) {
     state.spinMessage = "Enter a valid amount.";
@@ -1501,31 +1517,23 @@ function renderJoku() {
       <div class="roulette-head">
         <button class="pill-button menu-button" data-action="go-menu">Menu</button>
         ${renderJokuResult()}
-        <div class="status-pill muted">Free draw</div>
+        <div class="status-pill muted">Free play</div>
       </div>
 
       <div class="joku-table">
         <div class="joku-felt">
-          <div class="joku-title-block">
-            <span class="slots-kicker">No bet table</span>
-            <strong>JØKU</strong>
+          <div class="joku-slots">
+            ${renderJokuSlots()}
           </div>
 
-          <div class="joku-paytable">
-            ${JOKU_PAYOUTS.slice(0, 6).map((payout) => `
-              <div class="${joku.result && joku.result.rank === payout.rank ? "active" : ""}">
-                <span>${escapeHtml(payout.rank)}</span>
-                <strong>+$${formatMoney(payout.reward)}</strong>
-              </div>
-            `).join("")}
-          </div>
-
-          <div class="joku-hand ${joku.phase === "drawing" ? "drawing" : ""}">
-            ${(joku.hand.length ? joku.hand : Array.from({ length: JOKU_HAND_SIZE }, () => ({ hidden: true }))).map((card) => renderCard(card)).join("")}
+          <div class="joku-grid-container">
+            <div class="joku-grid">
+              ${joku.grid.map((card, index) => renderJokuCard(card, index)).join("")}
+            </div>
           </div>
 
           <div class="joku-controls">
-            <button class="pixel-button green" data-action="joku-draw" ${joku.phase === "drawing" ? "disabled" : ""}>Draw</button>
+            <button class="pixel-button green" data-action="joku-play" ${joku.selectedIndices.length === 5 ? "" : "disabled"}>Play</button>
           </div>
         </div>
       </div>
@@ -1535,10 +1543,32 @@ function renderJoku() {
           <span class="wallet-strip-label">Wallet</span>
           <strong>$${formatMoney(state.wallet)}</strong>
         </div>
-        <div class="joku-free-note">No chips leave your wallet here.</div>
+        <div class="joku-free-note">Find combinations of 5 cards to earn rewards.</div>
       </div>
       ${renderPopup()}
     </section>
+  `;
+}
+
+function renderJokuSlots() {
+  const joku = state.joku;
+  const selectedCards = joku.selectedIndices.map(idx => joku.grid[idx]);
+  const slots = Array.from({ length: 5 }, (_, i) => selectedCards[i] || { hidden: true });
+  return slots.map(card => renderCard(card)).join("");
+}
+
+function renderJokuCard(card, index) {
+  const joku = state.joku;
+  const selected = joku.selectedIndices.includes(index);
+  const isNew = joku.newIndices.includes(index);
+  const { row, col } = cardSpritePosition(card);
+
+  return `
+    <button class="playing-card joku-grid-card ${selected ? "selected" : ""} ${isNew ? "falling" : ""}" 
+            data-action="joku-select" data-index="${index}" aria-label="${card.rank} of ${card.suit}"
+            style="--col-delay: ${index % 5}">
+      <div class="card-face" style="background-position:${col * -72}px ${row * -98}px"></div>
+    </button>
   `;
 }
 
@@ -1562,10 +1592,12 @@ function renderJokuResult() {
     `;
   }
 
+  const needed = 5 - joku.selectedIndices.length;
+  const instruction = needed > 0 ? `Select ${needed} more card${needed === 1 ? "" : "s"}.` : "Hand ready to play.";
   return `
     <div class="result-board idle">
       <div class="result-main">JØKU</div>
-      <div class="result-sub">${escapeHtml(joku.message)}</div>
+      <div class="result-sub">${escapeHtml(instruction)}</div>
     </div>
   `;
 }
@@ -1700,7 +1732,7 @@ function currentMenuNote() {
   return state.spinMessage;
 }
 
-function createDeck() {
+function createDeck(includeJoker = false) {
   const suits = ["diamonds", "clubs", "hearts", "spades"];
   const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
   const deck = [];
@@ -1709,6 +1741,10 @@ function createDeck() {
     for (const rank of ranks) {
       deck.push({ suit, rank });
     }
+  }
+
+  if (includeJoker) {
+    deck.push({ suit: "wild", rank: "W" });
   }
 
   for (let i = deck.length - 1; i > 0; i -= 1) {
@@ -1760,6 +1796,7 @@ function isBlackjack(hand) {
 }
 
 function cardSpritePosition(card) {
+  if (card.suit === "wild") return { row: 2, col: 12 }; // placeholder
   const suitRow = { diamonds: 0, clubs: 1, hearts: 2, spades: 3 };
   const rankColumn = { A: 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6, "8": 7, "9": 8, "10": 9, J: 10, Q: 11, K: 12 };
   return {
@@ -1768,49 +1805,136 @@ function cardSpritePosition(card) {
   };
 }
 
-function drawJokuHand() {
+function initJokuGrid() {
   const joku = state.joku;
-  if (joku.phase === "drawing") return;
-
-  clearPendingPopupTimer();
-  state.popup = null;
-  state.pendingReveal = {
-    game: "joku",
-    title: "Drawing",
-    detail: "Cards are sliding out...",
-  };
-  joku.phase = "drawing";
+  joku.deck = createDeck(true); // Include Joker in JOKU
+  joku.grid = Array.from({ length: 25 }, () => joku.deck.pop());
+  joku.selectedIndices = [];
+  joku.newIndices = [];
   joku.result = null;
-  joku.message = "Drawing a free hand...";
-  joku.hand = Array.from({ length: JOKU_HAND_SIZE }, () => ({ hidden: true }));
-  joku.deck = createDeck();
-  render();
-
-  scheduleUiTask(() => {
-    joku.hand = Array.from({ length: JOKU_HAND_SIZE }, () => joku.deck.pop());
-    settleJokuHand();
-  }, 700);
+  joku.phase = "ready";
+  joku.message = "Select 5 linked cards.";
 }
 
-function settleJokuHand() {
+function toggleJokuCard(index) {
   const joku = state.joku;
-  const result = evaluateJokuHand(joku.hand);
+  if (joku.phase !== "ready") return;
+
+  const pos = joku.selectedIndices.indexOf(index);
+  if (pos !== -1) {
+    joku.selectedIndices.splice(pos, 1);
+  } else if (joku.selectedIndices.length < 5) {
+    if (joku.selectedIndices.length === 0) {
+      joku.selectedIndices.push(index);
+    } else {
+      const isPickable = joku.selectedIndices.some((idx) => isJokuAdjacent(idx, index));
+      if (isPickable) {
+        joku.newIndices = []; // clear old animations
+        joku.selectedIndices.push(index);
+      }
+    }
+  }
+  render();
+}
+
+function isJokuAdjacent(idx1, idx2) {
+  const r1 = Math.floor(idx1 / 5);
+  const c1 = idx1 % 5;
+  const r2 = Math.floor(idx2 / 5);
+  const c2 = idx2 % 5;
+  return Math.abs(r1 - r2) <= 1 && Math.abs(c1 - c2) <= 1;
+}
+
+function playJokuHand() {
+  const joku = state.joku;
+  if (joku.selectedIndices.length !== 5 || joku.phase !== "ready") return;
+
+  const hand = joku.selectedIndices.map(idx => joku.grid[idx]);
+  const result = evaluateJokuHand(hand);
+
   adjustWallet(result.reward);
   awardRoundXp("JØKU");
-  joku.phase = "ready";
   joku.result = result;
   joku.message = `${result.rank}. +$${formatMoney(result.reward)}`;
-  state.pendingReveal = null;
+
+  joku.phase = "refilling";
+  joku.newIndices = [...joku.selectedIndices]; // pulse animations for those going away
   render();
-  openPopupWithDelay({
-    tone: "win",
-    title: result.rank,
-    detail: `Collected $${formatMoney(result.reward)} without betting.`,
-    buttonLabel: "Draw Again",
-  }, 300);
+
+  setTimeout(() => {
+    refillJokuGrid();
+    joku.phase = "ready";
+    joku.selectedIndices = [];
+    render();
+
+    if (result.reward > 0) {
+      openPopupWithDelay({
+        tone: "win",
+        title: result.rank,
+        detail: `Collected $${formatMoney(result.reward)} Reward.`,
+        buttonLabel: "Keep Playing",
+      }, 300);
+    }
+  }, 600);
 }
 
+function refillJokuGrid() {
+  const joku = state.joku;
+  const removedSet = new Set(joku.selectedIndices);
+  const columns = 5;
+  const rows = 5;
+  joku.newIndices = [];
+
+  for (let col = 0; col < columns; col += 1) {
+    const columnStaying = [];
+    for (let row = rows - 1; row >= 0; row -= 1) {
+      const idx = row * columns + col;
+      if (!removedSet.has(idx)) {
+        columnStaying.push(joku.grid[idx]);
+      }
+    }
+
+    const cardsNeeded = rows - columnStaying.length;
+    const newCards = [];
+    for (let i = 0; i < cardsNeeded; i++) {
+      if (joku.deck.length < 1) joku.deck = createDeck(true);
+      newCards.push(joku.deck.pop());
+    }
+
+    const newColumn = [...newCards.reverse(), ...columnStaying.reverse()];
+
+    for (let row = 0; row < rows; row += 1) {
+      const idx = row * columns + col;
+      joku.grid[idx] = newColumn[row];
+      if (row < cardsNeeded) {
+        joku.newIndices.push(idx);
+      }
+    }
+  }
+}
+
+
 function evaluateJokuHand(hand) {
+  const wildIdx = hand.findIndex(c => c.suit === "wild");
+  if (wildIdx === -1) return evaluatePureJokuHand(hand);
+
+  // If there's a wild card, try all 52 possibilities
+  const suits = ["diamonds", "clubs", "hearts", "spades"];
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  let best = { rank: "High Card", reward: 0 };
+
+  for (const s of suits) {
+    for (const r of ranks) {
+      const testHand = [...hand];
+      testHand[wildIdx] = { suit: s, rank: r };
+      const res = evaluatePureJokuHand(testHand);
+      if (res.reward > best.reward) best = res;
+    }
+  }
+  return best;
+}
+
+function evaluatePureJokuHand(hand) {
   const rankOrder = { A: 14, K: 13, Q: 12, J: 11, "10": 10, "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2 };
   const values = hand.map((card) => rankOrder[card.rank]).sort((a, b) => a - b);
   const suits = hand.map((card) => card.suit);
@@ -2465,7 +2589,8 @@ window.render_game_to_text = () => JSON.stringify({
   },
   joku: {
     phase: state.joku.phase,
-    hand: state.joku.hand,
+    grid: state.joku.grid,
+    selectedIndices: state.joku.selectedIndices,
     result: state.joku.result,
     message: state.joku.message,
     canLoseMoney: false,
