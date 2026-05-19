@@ -2,6 +2,57 @@ const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 
 const CHIP_VALUES = [1, 5, 10, 25, 100];
 const numberSequence = Array.from({ length: 36 }, (_, index) => index + 1);
 const TABLE_ASPECT = 1790 / 887;
+const XP_PER_ROUND = 20;
+const FIRST_LEVEL_XP = 100;
+const LEVEL_XP_MULTIPLIER = 2.5;
+const SLOT_ROWS = 3;
+const SLOT_COLS = 5;
+const SLOT_HIGH_PATTERN_BOOST = 0.2;
+const JOKU_HAND_SIZE = 5;
+const JOKU_PAYOUTS = [
+  { rank: "Royal Flush", reward: 150 },
+  { rank: "Straight Flush", reward: 95 },
+  { rank: "Four of a Kind", reward: 70 },
+  { rank: "Full House", reward: 42 },
+  { rank: "Flush", reward: 30 },
+  { rank: "Straight", reward: 24 },
+  { rank: "Three of a Kind", reward: 16 },
+  { rank: "Two Pair", reward: 10 },
+  { rank: "Pair", reward: 5 },
+  { rank: "High Card", reward: 2 },
+];
+const SLOT_PATTERNS = [
+  { name: "HOR", multiplier: 1, variants: buildSlotHorizontalVariants(3) },
+  { name: "VERT", multiplier: 1, variants: [[[0, 0], [1, 0], [2, 0]], [[0, 1], [1, 1], [2, 1]], [[0, 2], [1, 2], [2, 2]], [[0, 3], [1, 3], [2, 3]], [[0, 4], [1, 4], [2, 4]]] },
+  { name: "DIAG", multiplier: 1, variants: [[[0, 0], [1, 1], [2, 2]], [[2, 0], [1, 1], [0, 2]], [[0, 1], [1, 2], [2, 3]], [[2, 1], [1, 2], [0, 3]], [[0, 2], [1, 3], [2, 4]], [[2, 2], [1, 3], [0, 4]]] },
+  { name: "HOR-L", multiplier: 2, variants: buildSlotHorizontalVariants(4) },
+  { name: "HOR-XL", multiplier: 3, variants: buildSlotHorizontalVariants(5) },
+  { name: "ZIG", multiplier: 3, variants: [[[0, 0], [1, 1], [0, 2], [1, 3], [0, 4]]] },
+  { name: "ZAG", multiplier: 3, variants: [[[2, 0], [1, 1], [2, 2], [1, 3], [2, 4]]] },
+  { name: "ABOVE", multiplier: 4, variants: [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]]] },
+  { name: "BELOW", multiplier: 4, variants: [[[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]]] },
+  { name: "EYE", multiplier: 5, variants: [[[0, 0], [0, 4], [1, 1], [1, 2], [1, 3], [2, 0], [2, 4]]] },
+  { name: "JACKPOT", multiplier: 10, variants: [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 0], [1, 1], [1, 2], [1, 3], [1, 4], [2, 0], [2, 1], [2, 2], [2, 3], [2, 4]]] },
+];
+const SLOT_SYMBOLS = [
+  { id: "cherry", label: "Cherry", short: "🍒", weight: 26, pays: { 3: 0.4, 4: 1.1, 5: 2.8 } },
+  { id: "lemon", label: "Lemon", short: "🍋", weight: 24, pays: { 3: 0.5, 4: 1.5, 5: 3.8 } },
+  { id: "clover", label: "Cloverleaf", short: "☘", weight: 20, pays: { 3: 0.8, 4: 2.2, 5: 5.4 } },
+  { id: "bell", label: "Bell", short: "🔔", weight: 14, pays: { 3: 1.4, 4: 4.2, 5: 9.5 } },
+  { id: "diamond", label: "Diamond", short: "💎", weight: 10, pays: { 3: 2.5, 4: 7.5, 5: 18 } },
+  { id: "treasure", label: "Treasure", short: "💰", weight: 8, pays: { 3: 3.6, 4: 10.5, 5: 25 } },
+  { id: "seven", label: "Seven", short: "7", weight: 4, pays: { 3: 6, 4: 18, 5: 42 } },
+];
+
+function buildSlotHorizontalVariants(length) {
+  const variants = [];
+  for (let row = 0; row < SLOT_ROWS; row += 1) {
+    for (let col = 0; col <= SLOT_COLS - length; col += 1) {
+      variants.push(Array.from({ length }, (_, offset) => [row, col + offset]));
+    }
+  }
+  return variants;
+}
 
 const state = {
   currentScreen: "menu",
@@ -9,6 +60,7 @@ const state = {
   pendingReveal: null,
   rouletteSpinActive: false,
   wallet: 0,
+  xp: 0,
   selectedAmount: 10,
   selectedBetId: "straight-0",
   hoverBetId: null,
@@ -29,6 +81,24 @@ const state = {
     dealerReveal: false,
     lastWager: 0,
   },
+  slot: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    grid: createRandomSlotGrid(),
+    animatingColumns: [],
+    result: null,
+    lastWins: [],
+    message: "Place chips, then spin.",
+  },
+  joku: {
+    phase: "ready",
+    deck: [],
+    hand: [],
+    result: null,
+    message: "Draw a free hand and collect the reward.",
+  },
 };
 
 const dragState = {
@@ -44,6 +114,9 @@ const betDefinitions = buildBetDefinitions();
 
 const appView = document.getElementById("app-view");
 const walletBalance = document.getElementById("wallet-balance");
+const playerLevel = document.getElementById("player-level");
+const playerXp = document.getElementById("player-xp");
+const xpFill = document.getElementById("xp-fill");
 const fundsInput = document.getElementById("funds-input");
 const addFundsButton = document.getElementById("add-funds-btn");
 const authForm = document.getElementById("auth-form");
@@ -68,6 +141,8 @@ const authState = {
 
 let walletSaveTimer = null;
 let lastSavedWallet = null;
+let lastSavedXp = null;
+let virtualNow = 0;
 
 addFundsButton.addEventListener("click", () => {
   addFundsFromInput();
@@ -100,6 +175,7 @@ appView.addEventListener("click", (event) => {
   if (action === "open-roulette") {
     clearPendingPopupTimer();
     state.currentScreen = "roulette";
+    scrollGameToTop();
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
@@ -111,6 +187,7 @@ appView.addEventListener("click", (event) => {
   if (action === "open-blackjack") {
     clearPendingPopupTimer();
     state.currentScreen = "blackjack";
+    scrollGameToTop();
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
@@ -119,8 +196,32 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "open-slots") {
+    clearPendingPopupTimer();
+    state.currentScreen = "slots";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    state.slot.message = state.slot.wager ? `Bet $${formatMoney(state.slot.wager)}` : "Place chips, then spin.";
+    render();
+    return;
+  }
+
+  if (action === "open-joku") {
+    clearPendingPopupTimer();
+    state.currentScreen = "joku";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
   if (action === "go-menu") {
     state.currentScreen = "menu";
+    scrollGameToTop();
     state.hoverBetId = null;
     state.popup = null;
     state.pendingReveal = null;
@@ -189,6 +290,26 @@ appView.addEventListener("click", (event) => {
     repeatBlackjackBet();
     return;
   }
+
+  if (action === "slot-spin") {
+    spinSlots();
+    return;
+  }
+
+  if (action === "slot-clear") {
+    clearSlotBet();
+    return;
+  }
+
+  if (action === "slot-repeat") {
+    repeatSlotBet();
+    return;
+  }
+
+  if (action === "joku-draw") {
+    drawJokuHand();
+    return;
+  }
 });
 
 appView.addEventListener("pointerdown", (event) => {
@@ -225,6 +346,8 @@ window.addEventListener("pointerup", (event) => {
       placeBet(dropBetId, amount);
     } else if (state.currentScreen === "blackjack") {
       placeBlackjackBet(amount);
+    } else if (state.currentScreen === "slots") {
+      placeSlotBet(amount);
     }
   } else {
     render();
@@ -255,20 +378,35 @@ window.addEventListener("keydown", (event) => {
     if (key === "enter" || key === "r" || key === " ") {
       event.preventDefault();
       state.currentScreen = "roulette";
+      scrollGameToTop();
       state.spinMessage = "Drag a chip onto the table.";
       render();
     }
     if (key === "j") {
       event.preventDefault();
       state.currentScreen = "blackjack";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "k") {
+      event.preventDefault();
+      state.currentScreen = "slots";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "u") {
+      event.preventDefault();
+      state.currentScreen = "joku";
+      scrollGameToTop();
       render();
     }
     return;
   }
 
-  if (key === "escape" || key === "b") {
+  if (key === "escape" || (key === "b" && state.currentScreen !== "slots")) {
     event.preventDefault();
     state.currentScreen = "menu";
+    scrollGameToTop();
     render();
     return;
   }
@@ -298,6 +436,41 @@ window.addEventListener("keydown", (event) => {
     if (key >= "1" && key <= "5") {
       const chipIndex = Number(key) - 1;
       placeBlackjackBet(CHIP_VALUES[chipIndex]);
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "slots") {
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      spinSlots();
+      return;
+    }
+    if (key === "b") {
+      placeSlotBet(state.selectedAmount);
+      return;
+    }
+    if (key === "c") {
+      clearSlotBet();
+      return;
+    }
+    if (key === "r") {
+      repeatSlotBet();
+      return;
+    }
+    if (key >= "1" && key <= "5") {
+      const chipIndex = Number(key) - 1;
+      placeSlotBet(CHIP_VALUES[chipIndex]);
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "joku") {
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      drawJokuHand();
       return;
     }
     return;
@@ -533,12 +706,56 @@ function adjustWallet(delta) {
   setWallet(state.wallet + delta);
 }
 
+function setXp(value, save = true) {
+  state.xp = Math.max(0, Math.floor(Number(value) || 0));
+  if (save) queueWalletSave();
+}
+
+function awardRoundXp(gameName) {
+  const beforeLevel = getLevelProgress(state.xp).level;
+  setXp(state.xp + XP_PER_ROUND);
+  const afterLevel = getLevelProgress(state.xp).level;
+  if (afterLevel > beforeLevel) {
+    state.spinMessage = `Level ${afterLevel} reached.`;
+    setAuthMessage(`Level ${afterLevel} reached. +${XP_PER_ROUND} XP`);
+    return;
+  }
+  setAuthMessage(`${gameName} round complete. +${XP_PER_ROUND} XP`);
+}
+
+function getLevelProgress(totalXp) {
+  let level = 1;
+  let levelStart = 0;
+  let nextCost = FIRST_LEVEL_XP;
+  let remaining = Math.max(0, Math.floor(totalXp));
+
+  while (remaining >= nextCost) {
+    remaining -= nextCost;
+    levelStart += nextCost;
+    level += 1;
+    nextCost = Math.round(nextCost * LEVEL_XP_MULTIPLIER);
+  }
+
+  return {
+    level,
+    levelStart,
+    nextLevelXp: levelStart + nextCost,
+    progressXp: remaining,
+    neededXp: nextCost,
+    percent: Math.min(100, Math.round((remaining / nextCost) * 100)),
+  };
+}
+
 function hasSupabase() {
   return Boolean(supabaseClient);
 }
 
 function setAuthMessage(message) {
   authMessage.textContent = message;
+}
+
+function scrollGameToTop() {
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
 function renderAuthPanel() {
@@ -605,6 +822,7 @@ async function signOut() {
   authState.account = null;
   authState.walletLoaded = false;
   lastSavedWallet = null;
+  lastSavedXp = null;
   authPassword.value = "";
   setAuthMessage("Logged out. Wallet changes are local only.");
   render();
@@ -668,7 +886,9 @@ function handleAccount(account, password, message) {
   };
   authPassword.value = "";
   setWallet(Number(account.balance) || 0, false);
+  setXp(Number(account.xp) || 0, false);
   lastSavedWallet = state.wallet;
+  lastSavedXp = state.xp;
   authState.walletLoaded = true;
   authState.loadingWallet = false;
   setAuthMessage(message);
@@ -694,13 +914,14 @@ async function flushWalletSave() {
 
 async function saveWallet() {
   if (!authState.account || !authState.walletLoaded || !hasSupabase()) return;
-  if (lastSavedWallet === state.wallet) return;
+  if (lastSavedWallet === state.wallet && lastSavedXp === state.xp) return;
 
   const balance = state.wallet;
   const { data, error } = await supabaseClient.rpc("save_player_wallet", {
     p_username: authState.account.username,
     p_password: authState.account.password,
     p_balance: balance,
+    p_xp: state.xp,
   });
 
   if (error) {
@@ -708,7 +929,9 @@ async function saveWallet() {
     return;
   }
 
-  lastSavedWallet = Number(data);
+  const saved = Array.isArray(data) ? data[0] : data;
+  lastSavedWallet = saved ? Number(saved.balance) : balance;
+  lastSavedXp = saved ? Number(saved.xp) : state.xp;
   setAuthMessage("Wallet synced.");
 }
 
@@ -739,22 +962,27 @@ function addFundsFromInput() {
 
 function clearPendingPopupTimer() {
   if (pendingPopupTimer) {
-    clearTimeout(pendingPopupTimer);
+    clearTimeout(pendingPopupTimer.timer);
     pendingPopupTimer = null;
   }
-  for (const timer of pendingUiTimers) {
-    clearTimeout(timer);
+  for (const task of pendingUiTimers) {
+    clearTimeout(task.timer);
   }
   pendingUiTimers.clear();
 }
 
 function scheduleUiTask(fn, delay) {
-  const timer = window.setTimeout(() => {
-    pendingUiTimers.delete(timer);
+  const task = {
+    due: virtualNow + delay,
+    fn,
+    timer: null,
+  };
+  task.timer = window.setTimeout(() => {
+    pendingUiTimers.delete(task);
     fn();
   }, delay);
-  pendingUiTimers.add(timer);
-  return timer;
+  pendingUiTimers.add(task);
+  return task;
 }
 
 function openPopupWithDelay(popup, delay = 900) {
@@ -881,6 +1109,7 @@ function spinWheel() {
   const totalStaked = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
   const net = payout - totalStaked;
   adjustWallet(payout);
+  awardRoundXp("Roulette");
 
   state.lastSpin = {
     winningNumber,
@@ -977,14 +1206,22 @@ function chipClassForValue(value) {
 }
 
 function render() {
+  const progress = getLevelProgress(state.xp);
   walletBalance.textContent = `$${formatMoney(state.wallet)}`;
+  playerLevel.textContent = String(progress.level);
+  playerXp.textContent = `${progress.progressXp} / ${progress.neededXp} XP`;
+  xpFill.style.width = `${progress.percent}%`;
   renderAuthPanel();
   if (state.currentScreen === "menu") {
     appView.innerHTML = renderMenu();
   } else if (state.currentScreen === "roulette") {
     appView.innerHTML = renderRoulette();
-  } else {
+  } else if (state.currentScreen === "blackjack") {
     appView.innerHTML = renderBlackjack();
+  } else if (state.currentScreen === "slots") {
+    appView.innerHTML = renderSlots();
+  } else {
+    appView.innerHTML = renderJoku();
   }
 }
 
@@ -1016,6 +1253,30 @@ function renderMenu() {
               <p>Pixel table, random shuffled deck, dealer play, pushes, doubles, and 3:2 blackjacks.</p>
             </div>
           </button>
+          <button class="game-card" data-action="open-slots">
+            <div class="slots-menu-art">
+              <div class="slots-menu-reel">☘</div>
+              <div class="slots-menu-reel">🔔</div>
+              <div class="slots-menu-reel">💎</div>
+              <div class="slots-menu-reel">💰</div>
+              <div class="slots-menu-reel">7</div>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Slots</h3>
+              <p>Three rows, five reels, eleven patterns, and a paced spin that sits between feast and famine.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-joku">
+            <div class="joku-menu-art">
+              ${["J", "O", "K", "U"].map((rank, index) => renderMenuCard(rank, index)).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Free play</p>
+              <h3>JØKU</h3>
+              <p>Draw five cards for free, score the hand, and add the reward straight to your wallet.</p>
+            </div>
+          </button>
         </div>
       </article>
 
@@ -1023,7 +1284,7 @@ function renderMenu() {
         <div>
           <p class="menu-eyebrow">Casino</p>
           <h2>Two tables, one wallet</h2>
-          <p class="menu-copy">Top up the wallet in the header, bounce between roulette and blackjack, and keep the same stack moving through both games.</p>
+          <p class="menu-copy">Top up the wallet in the header, bounce between the tables, or build your stack for free in JØKU.</p>
         </div>
         <div class="menu-stats">
           <div class="menu-stat">
@@ -1032,11 +1293,11 @@ function renderMenu() {
           </div>
           <div class="menu-stat">
             <p class="game-tag">Tables</p>
-            <strong>2</strong>
+            <strong>4</strong>
           </div>
           <div class="menu-stat">
-            <p class="game-tag">Blackjack</p>
-            <strong>3:2</strong>
+            <p class="game-tag">Level</p>
+            <strong>${getLevelProgress(state.xp).level}</strong>
           </div>
         </div>
         <div class="menu-note">${escapeHtml(currentMenuNote())}</div>
@@ -1176,6 +1437,187 @@ function renderBlackjack() {
   `;
 }
 
+function renderSlots() {
+  const slot = state.slot;
+  return `
+    <section class="slots-screen surface">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderSlotsResult()}
+        <div class="status-pill muted">Bet $${formatMoney(slot.wager)}</div>
+      </div>
+
+      <div class="slots-cabinet">
+        <div class="slots-header">
+          <div class="slots-title-block">
+            <span class="slots-kicker">Patterns</span>
+            <strong>Lucky Pit</strong>
+          </div>
+          <div class="slots-lines">
+            ${SLOT_PATTERNS.map((pattern) => `<span class="${slot.lastWins.some((win) => win.pattern === pattern.name) ? "active" : ""}">${escapeHtml(pattern.name)}</span>`).join("")}
+          </div>
+        </div>
+
+        <div class="slots-grid ${slot.phase === "spinning" ? "spinning" : ""}">
+          ${slot.grid.map((row, rowIndex) => `
+            <div class="slots-row">
+              ${row.map((symbolId, colIndex) => renderSlotCell(symbolId, rowIndex, colIndex)).join("")}
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="slots-footer">
+          <div class="slot-bet-pot ${state.hoverBetId === "slot-main" ? "hover" : ""}" data-bet-zone="slot-main">
+            <span>Bet</span>
+            <strong>$${formatMoney(slot.wager)}</strong>
+            <div class="slot-bet-chips">${renderSlotWagerChips()}</div>
+          </div>
+          <div class="slot-controls">
+            <button class="pixel-button green" data-action="slot-spin" ${canSpinSlots() ? "" : "disabled"}>Spin</button>
+            <button class="pixel-button red" data-action="slot-clear" ${slot.phase === "betting" && slot.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="slot-repeat" ${canRepeatSlots() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="chip-tray">
+          ${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}
+        </div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderJoku() {
+  const joku = state.joku;
+  return `
+    <section class="joku-screen surface">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderJokuResult()}
+        <div class="status-pill muted">Free draw</div>
+      </div>
+
+      <div class="joku-table">
+        <div class="joku-felt">
+          <div class="joku-title-block">
+            <span class="slots-kicker">No bet table</span>
+            <strong>JØKU</strong>
+          </div>
+
+          <div class="joku-paytable">
+            ${JOKU_PAYOUTS.slice(0, 6).map((payout) => `
+              <div class="${joku.result && joku.result.rank === payout.rank ? "active" : ""}">
+                <span>${escapeHtml(payout.rank)}</span>
+                <strong>+$${formatMoney(payout.reward)}</strong>
+              </div>
+            `).join("")}
+          </div>
+
+          <div class="joku-hand ${joku.phase === "drawing" ? "drawing" : ""}">
+            ${(joku.hand.length ? joku.hand : Array.from({ length: JOKU_HAND_SIZE }, () => ({ hidden: true }))).map((card) => renderCard(card)).join("")}
+          </div>
+
+          <div class="joku-controls">
+            <button class="pixel-button green" data-action="joku-draw" ${joku.phase === "drawing" ? "disabled" : ""}>Draw</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="joku-free-note">No chips leave your wallet here.</div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderJokuResult() {
+  const joku = state.joku;
+  if (state.pendingReveal && state.pendingReveal.game === "joku") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
+  if (joku.result) {
+    return `
+      <div class="result-board win">
+        <div class="result-main">${escapeHtml(joku.result.rank)}</div>
+        <div class="result-sub">+$${formatMoney(joku.result.reward)}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="result-board idle">
+      <div class="result-main">JØKU</div>
+      <div class="result-sub">${escapeHtml(joku.message)}</div>
+    </div>
+  `;
+}
+
+function renderSlotsResult() {
+  const slot = state.slot;
+  if (state.pendingReveal && state.pendingReveal.game === "slots") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
+  if (slot.result) {
+    const tone = slot.result.net > 0 ? "win" : slot.result.net < 0 ? "loss" : "idle";
+    return `
+      <div class="result-board ${tone}">
+        <div class="result-main">${slot.result.net > 0 ? "Win" : slot.result.net < 0 ? "Miss" : "Push"}</div>
+        <div class="result-sub">${slot.result.net > 0 ? `+$${formatMoney(slot.result.net)}` : slot.result.net < 0 ? `-$${formatMoney(Math.abs(slot.result.net))}` : "Bet returned."}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Slots</div>
+      <div class="result-sub">${escapeHtml(slot.message)}</div>
+    </div>
+  `;
+}
+
+function renderSlotCell(symbolId, rowIndex, colIndex) {
+  const symbol = slotSymbolById(symbolId);
+  const spinning = state.slot.animatingColumns.includes(colIndex);
+  return `
+    <div class="slot-cell symbol-${symbol.id} ${spinning ? "spinning" : ""}">
+      <span>${escapeHtml(symbol.short)}</span>
+    </div>
+  `;
+}
+
+function renderSlotWagerChips() {
+  if (!state.slot.wagerChips.length) return "";
+  return state.slot.wagerChips.map((value, index) => `
+    <div class="placed-chip slot-chip chip-${chipClassForValue(value)}" style="left:${34 + index * 12}px;top:${26 + (index % 2) * 10}px">
+      $${formatChipValue(value)}
+    </div>
+  `).join("");
+}
+
 function renderPopup() {
   if (!state.popup) return "";
   return `
@@ -1219,6 +1661,22 @@ function renderBlackjackWagerChips() {
   `).join("");
 }
 
+function renderMenuCard(rank, index) {
+  const cards = [
+    { suit: "spades", rank: "J" },
+    { suit: "hearts", rank: "Q" },
+    { suit: "clubs", rank: "K" },
+    { suit: "diamonds", rank: "A" },
+  ];
+  const card = cards[index] || cards[0];
+  const { row, col } = cardSpritePosition(card);
+  return `
+    <div class="playing-card joku-preview-card" aria-label="${escapeAttribute(rank)}">
+      <div class="card-face" style="background-position:${col * -72}px ${row * -98}px"></div>
+    </div>
+  `;
+}
+
 function renderCard(card) {
   if (!card || card.hidden) {
     return `<div class="playing-card card-back"><div class="card-back-inner"></div></div>`;
@@ -1233,7 +1691,11 @@ function renderCard(card) {
 }
 
 function currentMenuNote() {
+  if (state.joku.result) return state.joku.message;
   if (state.blackjack.result) return state.blackjack.result.detail;
+  if (state.slot.result) return state.slot.message;
+  if (state.joku.message !== "Draw a free hand and collect the reward.") return state.joku.message;
+  if (state.slot.message !== "Place chips, then spin.") return state.slot.message;
   if (state.blackjack.message !== "Place chips, then deal.") return state.blackjack.message;
   return state.spinMessage;
 }
@@ -1304,6 +1766,167 @@ function cardSpritePosition(card) {
     row: suitRow[card.suit],
     col: rankColumn[card.rank],
   };
+}
+
+function drawJokuHand() {
+  const joku = state.joku;
+  if (joku.phase === "drawing") return;
+
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = {
+    game: "joku",
+    title: "Drawing",
+    detail: "Cards are sliding out...",
+  };
+  joku.phase = "drawing";
+  joku.result = null;
+  joku.message = "Drawing a free hand...";
+  joku.hand = Array.from({ length: JOKU_HAND_SIZE }, () => ({ hidden: true }));
+  joku.deck = createDeck();
+  render();
+
+  scheduleUiTask(() => {
+    joku.hand = Array.from({ length: JOKU_HAND_SIZE }, () => joku.deck.pop());
+    settleJokuHand();
+  }, 700);
+}
+
+function settleJokuHand() {
+  const joku = state.joku;
+  const result = evaluateJokuHand(joku.hand);
+  adjustWallet(result.reward);
+  awardRoundXp("JØKU");
+  joku.phase = "ready";
+  joku.result = result;
+  joku.message = `${result.rank}. +$${formatMoney(result.reward)}`;
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: "win",
+    title: result.rank,
+    detail: `Collected $${formatMoney(result.reward)} without betting.`,
+    buttonLabel: "Draw Again",
+  }, 300);
+}
+
+function evaluateJokuHand(hand) {
+  const rankOrder = { A: 14, K: 13, Q: 12, J: 11, "10": 10, "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2 };
+  const values = hand.map((card) => rankOrder[card.rank]).sort((a, b) => a - b);
+  const suits = hand.map((card) => card.suit);
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  const groups = [...counts.values()].sort((a, b) => b - a);
+  const flush = suits.every((suit) => suit === suits[0]);
+  const wheel = values.join(",") === "2,3,4,5,14";
+  const straight = wheel || values.every((value, index) => index === 0 || value === values[index - 1] + 1);
+  const royal = flush && values.join(",") === "10,11,12,13,14";
+
+  let rank = "High Card";
+  if (royal) rank = "Royal Flush";
+  else if (straight && flush) rank = "Straight Flush";
+  else if (groups[0] === 4) rank = "Four of a Kind";
+  else if (groups[0] === 3 && groups[1] === 2) rank = "Full House";
+  else if (flush) rank = "Flush";
+  else if (straight) rank = "Straight";
+  else if (groups[0] === 3) rank = "Three of a Kind";
+  else if (groups[0] === 2 && groups[1] === 2) rank = "Two Pair";
+  else if (groups[0] === 2) rank = "Pair";
+
+  const payout = JOKU_PAYOUTS.find((item) => item.rank === rank) || JOKU_PAYOUTS[JOKU_PAYOUTS.length - 1];
+  return {
+    rank,
+    reward: payout.reward,
+  };
+}
+
+function randomWeightedSlotSymbol() {
+  const totalWeight = SLOT_SYMBOLS.reduce((sum, symbol) => sum + symbol.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const symbol of SLOT_SYMBOLS) {
+    roll -= symbol.weight;
+    if (roll <= 0) return symbol.id;
+  }
+  return SLOT_SYMBOLS[SLOT_SYMBOLS.length - 1].id;
+}
+
+function createRandomSlotGrid() {
+  const grid = Array.from({ length: SLOT_ROWS }, () =>
+    Array.from({ length: SLOT_COLS }, () => randomWeightedSlotSymbol()));
+  return maybeBoostSlotHighPattern(grid);
+}
+
+function cloneSlotGrid(grid) {
+  return grid.map((row) => [...row]);
+}
+
+function setSlotColumn(grid, column, values) {
+  for (let row = 0; row < SLOT_ROWS; row += 1) {
+    grid[row][column] = values[row];
+  }
+}
+
+function randomSlotColumn() {
+  return Array.from({ length: SLOT_ROWS }, () => randomWeightedSlotSymbol());
+}
+
+function maybeBoostSlotHighPattern(grid) {
+  const hasHighPattern = evaluateSlotGrid(grid, 1).wins.some((win) => win.multiplier > 1);
+  if (hasHighPattern || Math.random() >= SLOT_HIGH_PATTERN_BOOST) return grid;
+
+  const boostedGrid = cloneSlotGrid(grid);
+  const highPatterns = SLOT_PATTERNS.filter((pattern) => pattern.multiplier > 1);
+  const pattern = randomArrayItem(highPatterns);
+  const cells = randomArrayItem(pattern.variants);
+  const symbolId = randomWeightedSlotSymbol();
+  for (const [row, col] of cells) {
+    boostedGrid[row][col] = symbolId;
+  }
+  return boostedGrid;
+}
+
+function randomArrayItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function slotSymbolById(id) {
+  return SLOT_SYMBOLS.find((symbol) => symbol.id === id);
+}
+
+function evaluateSlotGrid(grid, wager) {
+  const wins = [];
+  let payout = 0;
+
+  for (const pattern of SLOT_PATTERNS) {
+    const match = findSlotPatternMatch(grid, pattern);
+    if (match) {
+      const returned = Math.round(wager * pattern.multiplier * 100) / 100;
+      payout += returned;
+      wins.push({
+        pattern: pattern.name,
+        symbol: match.symbol.label,
+        count: match.count,
+        multiplier: pattern.multiplier,
+        returned,
+      });
+    }
+  }
+
+  payout = Math.round(payout * 100) / 100;
+  return { payout, wins };
+}
+
+function findSlotPatternMatch(grid, pattern) {
+  for (const cells of pattern.variants) {
+    const firstId = grid[cells[0][0]][cells[0][1]];
+    if (cells.every(([row, col]) => grid[row][col] === firstId)) {
+      return {
+        symbol: slotSymbolById(firstId),
+        count: cells.length,
+      };
+    }
+  }
+  return null;
 }
 
 function resetBlackjackTable() {
@@ -1390,6 +2013,16 @@ function canRepeatBlackjack() {
   return bj.phase === "betting" && bj.lastWager > 0;
 }
 
+function canSpinSlots() {
+  const slot = state.slot;
+  return slot.phase === "betting" && slot.wager > 0;
+}
+
+function canRepeatSlots() {
+  const slot = state.slot;
+  return slot.phase === "betting" && slot.lastWager > 0;
+}
+
 function buildChipListForAmount(amount) {
   let remaining = amount;
   const chips = [];
@@ -1401,6 +2034,157 @@ function buildChipListForAmount(amount) {
     }
   }
   return chips.reverse();
+}
+
+function placeSlotBet(amount) {
+  const slot = state.slot;
+  if (slot.phase !== "betting") {
+    slot.message = "Wait for the reels to settle.";
+    render();
+    return;
+  }
+
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (chip > state.wallet) {
+    slot.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+
+  adjustWallet(-chip);
+  slot.wager += chip;
+  slot.wagerChips.push(chip);
+  slot.result = null;
+  slot.message = `Bet $${formatMoney(slot.wager)}`;
+  state.pendingReveal = null;
+  state.popup = null;
+  state.selectedAmount = chip;
+  render();
+}
+
+function clearSlotBet() {
+  const slot = state.slot;
+  if (slot.phase !== "betting" || !slot.wager) return;
+  adjustWallet(slot.wager);
+  slot.wager = 0;
+  slot.wagerChips = [];
+  slot.lastWins = [];
+  slot.message = "Bet cleared.";
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function repeatSlotBet() {
+  const slot = state.slot;
+  if (slot.phase !== "betting" || !slot.lastWager) return;
+  if (slot.lastWager > state.wallet) {
+    slot.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+
+  adjustWallet(-slot.lastWager);
+  slot.wager = slot.lastWager;
+  slot.wagerChips = buildChipListForAmount(slot.lastWager);
+  slot.lastWins = [];
+  slot.result = null;
+  slot.message = `Bet $${formatMoney(slot.wager)}`;
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function spinSlots() {
+  const slot = state.slot;
+  if (!canSpinSlots()) {
+    slot.message = "Place chips, then spin.";
+    render();
+    return;
+  }
+
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = {
+    game: "slots",
+    title: "Spinning",
+    detail: "Reels are rolling...",
+  };
+  slot.phase = "spinning";
+  slot.result = null;
+  slot.lastWins = [];
+  slot.lastWager = slot.wager;
+
+  const finalGrid = createRandomSlotGrid();
+  slot.animatingColumns = [0, 1, 2, 3, 4];
+  render();
+
+  for (let col = 0; col < SLOT_COLS; col += 1) {
+    animateSlotColumn(col, finalGrid, 0, 7 + col * 2);
+  }
+}
+
+function animateSlotColumn(column, finalGrid, step, maxSteps) {
+  const slot = state.slot;
+  if (slot.phase !== "spinning") return;
+
+  const nextGrid = cloneSlotGrid(slot.grid);
+  setSlotColumn(nextGrid, column, step >= maxSteps ? [finalGrid[0][column], finalGrid[1][column], finalGrid[2][column]] : randomSlotColumn());
+  slot.grid = nextGrid;
+
+  if (step >= maxSteps) {
+    slot.animatingColumns = slot.animatingColumns.filter((value) => value !== column);
+    render();
+
+    if (!slot.animatingColumns.length) {
+      finishSlotSpin(finalGrid);
+    }
+    return;
+  }
+
+  render();
+  scheduleUiTask(() => {
+    animateSlotColumn(column, finalGrid, step + 1, maxSteps);
+  }, 90 + column * 18);
+}
+
+function finishSlotSpin(finalGrid) {
+  const slot = state.slot;
+  slot.grid = finalGrid;
+  slot.phase = "betting";
+  slot.animatingColumns = [];
+
+  const { payout, wins } = evaluateSlotGrid(finalGrid, slot.wager);
+  const wager = slot.wager;
+  const net = Math.round((payout - wager) * 100) / 100;
+  if (payout > 0) adjustWallet(payout);
+  awardRoundXp("Slots");
+
+  slot.result = {
+    payout,
+    net,
+    wins,
+  };
+  slot.lastWins = wins;
+  slot.message = net > 0 ? `Won $${formatMoney(net)}` : net < 0 ? `Lost $${formatMoney(Math.abs(net))}` : "Push";
+  slot.wager = 0;
+  slot.wagerChips = [];
+  state.pendingReveal = null;
+  render();
+
+  const popupTitle = net > 0 ? (wins.length > 1 ? "Big Win" : "Win") : net < 0 ? "No Hit" : "Push";
+  const popupDetail = net > 0
+    ? `Won $${formatMoney(net)} on ${wins.length} pattern${wins.length === 1 ? "" : "s"}`
+    : net < 0
+      ? `Lost $${formatMoney(Math.abs(net))}`
+      : "Bet returned.";
+  openPopupWithDelay({
+    tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+    title: popupTitle,
+    detail: popupDetail,
+    buttonLabel: "Spin Again",
+  }, 350);
 }
 
 function startBlackjackRound() {
@@ -1550,6 +2334,7 @@ function scheduleDealerDrawStep() {
 function payoutBlackjackRound(title, detail, returnedAmount, net, tone, delay = 1000) {
   const bj = state.blackjack;
   if (returnedAmount > 0) adjustWallet(returnedAmount);
+  awardRoundXp("Blackjack");
   bj.phase = "betting";
   bj.dealerReveal = true;
   bj.result = { title, detail, tone };
@@ -1655,6 +2440,8 @@ function escapeAttribute(value) {
 window.render_game_to_text = () => JSON.stringify({
   screen: state.currentScreen,
   wallet: state.wallet,
+  xp: state.xp,
+  level: getLevelProgress(state.xp).level,
   selectedAmount: state.selectedAmount,
   selectedBetId: state.selectedBetId,
   hoverBetId: state.hoverBetId,
@@ -1668,12 +2455,42 @@ window.render_game_to_text = () => JSON.stringify({
     result: state.blackjack.result,
     message: state.blackjack.message,
   },
+  slots: {
+    phase: state.slot.phase,
+    wager: state.slot.wager,
+    grid: state.slot.grid,
+    result: state.slot.result,
+    message: state.slot.message,
+    animatingColumns: state.slot.animatingColumns,
+  },
+  joku: {
+    phase: state.joku.phase,
+    hand: state.joku.hand,
+    result: state.joku.result,
+    message: state.joku.message,
+    canLoseMoney: false,
+  },
   message: state.spinMessage,
   dragActive: dragState.active,
-  availableGames: ["roulette", "blackjack"],
+  availableGames: ["roulette", "blackjack", "slots", "joku"],
 });
 
-window.advanceTime = () => {
+window.advanceTime = (ms = 0) => {
+  virtualNow += Math.max(0, Number(ms) || 0);
+  let ranTask = true;
+  while (ranTask) {
+    ranTask = false;
+    const dueTasks = [...pendingUiTimers]
+      .filter((task) => task.due <= virtualNow)
+      .sort((a, b) => a.due - b.due);
+    for (const task of dueTasks) {
+      if (!pendingUiTimers.has(task)) continue;
+      clearTimeout(task.timer);
+      pendingUiTimers.delete(task);
+      task.fn();
+      ranTask = true;
+    }
+  }
   render();
 };
 
