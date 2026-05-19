@@ -47,13 +47,13 @@ const walletBalance = document.getElementById("wallet-balance");
 const fundsInput = document.getElementById("funds-input");
 const addFundsButton = document.getElementById("add-funds-btn");
 const authForm = document.getElementById("auth-form");
-const authEmail = document.getElementById("auth-email");
+const authUsername = document.getElementById("auth-username");
 const authPassword = document.getElementById("auth-password");
 const signupButton = document.getElementById("signup-btn");
 const logoutButton = document.getElementById("logout-btn");
 const authMessage = document.getElementById("auth-message");
 const accountCard = document.getElementById("account-card");
-const accountEmail = document.getElementById("account-email");
+const accountName = document.getElementById("account-name");
 
 const supabaseConfig = window.ALCES_SUPABASE || {};
 const supabaseClient = window.supabase && supabaseConfig.url && !supabaseConfig.url.includes("YOUR-PROJECT-REF")
@@ -75,11 +75,11 @@ addFundsButton.addEventListener("click", () => {
 
 authForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  signInWithEmail();
+  signInWithUsername();
 });
 
 signupButton.addEventListener("click", () => {
-  signUpWithEmail();
+  signUpWithUsername();
 });
 
 logoutButton.addEventListener("click", () => {
@@ -549,11 +549,11 @@ function renderAuthPanel() {
   fundsInput.disabled = authState.loadingWallet;
 
   if (signedIn) {
-    accountEmail.textContent = authState.user.email || "Account";
+    accountName.textContent = getDisplayUsername(authState.user);
   }
 }
 
-async function signUpWithEmail() {
+async function signUpWithUsername() {
   if (!hasSupabase()) {
     setAuthMessage("Add your Supabase URL and key in supabase-config.js first.");
     return;
@@ -567,7 +567,9 @@ async function signUpWithEmail() {
     email: credentials.email,
     password: credentials.password,
     options: {
-      emailRedirectTo: window.location.origin,
+      data: {
+        username: credentials.username,
+      },
     },
   });
 
@@ -579,11 +581,11 @@ async function signUpWithEmail() {
   if (data.session) {
     setAuthMessage("Account ready. Wallet is saved.");
   } else {
-    setAuthMessage("Check your email to confirm the account.");
+    setAuthMessage("Turn off Confirm email in Supabase Auth so username signup can log in.");
   }
 }
 
-async function signInWithEmail() {
+async function signInWithUsername() {
   if (!hasSupabase()) {
     setAuthMessage("Add your Supabase URL and key in supabase-config.js first.");
     return;
@@ -611,12 +613,22 @@ async function signOut() {
 }
 
 function getAuthCredentials() {
-  const email = authEmail.value.trim();
+  const rawUsername = authUsername.value.trim();
+  const username = normalizeUsername(rawUsername);
   const password = authPassword.value;
 
-  if (!email || !password) {
-    setAuthMessage("Enter an email and password.");
+  if (!username || !password) {
+    setAuthMessage("Enter a username and password.");
     return null;
+  }
+
+  if (username.length < 3) {
+    setAuthMessage("Username must be at least 3 characters.");
+    return null;
+  }
+
+  if (username !== rawUsername.toLowerCase()) {
+    authUsername.value = username;
   }
 
   if (password.length < 6) {
@@ -624,7 +636,26 @@ function getAuthCredentials() {
     return null;
   }
 
-  return { email, password };
+  return {
+    username,
+    email: usernameToEmail(username),
+    password,
+  };
+}
+
+function normalizeUsername(value) {
+  return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+}
+
+function usernameToEmail(username) {
+  return `${username}@alcesgamble.local`;
+}
+
+function getDisplayUsername(user) {
+  if (!user) return "Account";
+  if (user.user_metadata && user.user_metadata.username) return user.user_metadata.username;
+  const emailName = (user.email || "").split("@")[0];
+  return emailName || "Account";
 }
 
 async function initializeAuth() {

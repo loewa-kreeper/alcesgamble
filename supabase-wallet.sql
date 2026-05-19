@@ -4,6 +4,9 @@ create table if not exists public.wallets (
   updated_at timestamptz not null default now()
 );
 
+comment on table public.wallets is
+  'Wallet balances for Alces Gamble accounts. Username logins use a generated internal email address in Supabase Auth.';
+
 alter table public.wallets enable row level security;
 
 drop policy if exists "Users can read their wallet" on public.wallets;
