@@ -46,9 +46,44 @@ const appView = document.getElementById("app-view");
 const walletBalance = document.getElementById("wallet-balance");
 const fundsInput = document.getElementById("funds-input");
 const addFundsButton = document.getElementById("add-funds-btn");
+const authForm = document.getElementById("auth-form");
+const authEmail = document.getElementById("auth-email");
+const authPassword = document.getElementById("auth-password");
+const signupButton = document.getElementById("signup-btn");
+const logoutButton = document.getElementById("logout-btn");
+const authMessage = document.getElementById("auth-message");
+const accountCard = document.getElementById("account-card");
+const accountEmail = document.getElementById("account-email");
+
+const supabaseConfig = window.ALCES_SUPABASE || {};
+const supabaseClient = window.supabase && supabaseConfig.url && !supabaseConfig.url.includes("YOUR-PROJECT-REF")
+  ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.publishableKey)
+  : null;
+
+const authState = {
+  user: null,
+  loadingWallet: false,
+  walletLoaded: false,
+};
+
+let walletSaveTimer = null;
+let lastSavedWallet = null;
 
 addFundsButton.addEventListener("click", () => {
   addFundsFromInput();
+});
+
+authForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  signInWithEmail();
+});
+
+signupButton.addEventListener("click", () => {
+  signUpWithEmail();
+});
+
+logoutButton.addEventListener("click", () => {
+  signOut();
 });
 
 appView.addEventListener("click", (event) => {
@@ -489,6 +524,219 @@ function formatChipValue(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function setWallet(value, save = true) {
+  state.wallet = sanitizeMoney(value);
+  if (save) queueWalletSave();
+}
+
+function adjustWallet(delta) {
+  setWallet(state.wallet + delta);
+}
+
+function hasSupabase() {
+  return Boolean(supabaseClient);
+}
+
+function setAuthMessage(message) {
+  authMessage.textContent = message;
+}
+
+function renderAuthPanel() {
+  const signedIn = Boolean(authState.user);
+  authForm.classList.toggle("hidden", signedIn);
+  accountCard.classList.toggle("hidden", !signedIn);
+  addFundsButton.disabled = authState.loadingWallet;
+  fundsInput.disabled = authState.loadingWallet;
+
+  if (signedIn) {
+    accountEmail.textContent = authState.user.email || "Account";
+  }
+}
+
+async function signUpWithEmail() {
+  if (!hasSupabase()) {
+    setAuthMessage("Add your Supabase URL and key in supabase-config.js first.");
+    return;
+  }
+
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
+
+  setAuthMessage("Creating account...");
+  const { data, error } = await supabaseClient.auth.signUp({
+    email: credentials.email,
+    password: credentials.password,
+    options: {
+      emailRedirectTo: window.location.origin,
+    },
+  });
+
+  if (error) {
+    setAuthMessage(error.message);
+    return;
+  }
+
+  if (data.session) {
+    setAuthMessage("Account ready. Wallet is saved.");
+  } else {
+    setAuthMessage("Check your email to confirm the account.");
+  }
+}
+
+async function signInWithEmail() {
+  if (!hasSupabase()) {
+    setAuthMessage("Add your Supabase URL and key in supabase-config.js first.");
+    return;
+  }
+
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
+
+  setAuthMessage("Logging in...");
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: credentials.email,
+    password: credentials.password,
+  });
+
+  if (error) setAuthMessage(error.message);
+}
+
+async function signOut() {
+  if (!hasSupabase()) return;
+  await flushWalletSave();
+  const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+  if (error) {
+    setAuthMessage(error.message);
+  }
+}
+
+function getAuthCredentials() {
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+
+  if (!email || !password) {
+    setAuthMessage("Enter an email and password.");
+    return null;
+  }
+
+  if (password.length < 6) {
+    setAuthMessage("Password must be at least 6 characters.");
+    return null;
+  }
+
+  return { email, password };
+}
+
+async function initializeAuth() {
+  if (!hasSupabase()) {
+    setAuthMessage("Supabase config needed before accounts can save.");
+    renderAuthPanel();
+    return;
+  }
+
+  const { data } = await supabaseClient.auth.getSession();
+  await handleSession(data.session);
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    handleSession(session);
+  });
+}
+
+async function handleSession(session) {
+  authState.user = session ? session.user : null;
+  authState.walletLoaded = false;
+
+  if (!authState.user) {
+    lastSavedWallet = null;
+    setAuthMessage("Logged out. Wallet changes are local only.");
+    render();
+    return;
+  }
+
+  authPassword.value = "";
+  setAuthMessage("Loading wallet...");
+  await loadWallet();
+}
+
+async function loadWallet() {
+  if (!authState.user || !hasSupabase()) return;
+
+  authState.loadingWallet = true;
+  renderAuthPanel();
+
+  const { data, error } = await supabaseClient
+    .from("wallets")
+    .select("balance")
+    .eq("user_id", authState.user.id)
+    .maybeSingle();
+
+  if (error) {
+    setAuthMessage(`Wallet load failed: ${error.message}`);
+    authState.loadingWallet = false;
+    render();
+    return;
+  }
+
+  const balance = data ? Number(data.balance) : state.wallet;
+  if (!data) {
+    const { error: insertError } = await supabaseClient
+      .from("wallets")
+      .insert({ user_id: authState.user.id, balance });
+    if (insertError) {
+      setAuthMessage(`Wallet setup failed: ${insertError.message}`);
+      authState.loadingWallet = false;
+      render();
+      return;
+    }
+  }
+
+  setWallet(balance, false);
+  lastSavedWallet = state.wallet;
+  authState.walletLoaded = true;
+  authState.loadingWallet = false;
+  setAuthMessage("Wallet synced.");
+  render();
+}
+
+function queueWalletSave() {
+  if (!authState.user || !authState.walletLoaded || authState.loadingWallet || !hasSupabase()) return;
+  if (walletSaveTimer) clearTimeout(walletSaveTimer);
+  walletSaveTimer = window.setTimeout(() => {
+    walletSaveTimer = null;
+    saveWallet();
+  }, 450);
+}
+
+async function flushWalletSave() {
+  if (walletSaveTimer) {
+    clearTimeout(walletSaveTimer);
+    walletSaveTimer = null;
+  }
+  await saveWallet();
+}
+
+async function saveWallet() {
+  if (!authState.user || !authState.walletLoaded || !hasSupabase()) return;
+  if (lastSavedWallet === state.wallet) return;
+
+  const balance = state.wallet;
+  const { error } = await supabaseClient
+    .from("wallets")
+    .upsert({
+      user_id: authState.user.id,
+      balance,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) {
+    setAuthMessage(`Wallet save failed: ${error.message}`);
+    return;
+  }
+
+  lastSavedWallet = balance;
+  setAuthMessage("Wallet synced.");
+}
+
 function getBetDefinition(id) {
   return betDefinitions.find((bet) => bet.id === id);
 }
@@ -507,7 +755,7 @@ function addFundsFromInput() {
     return;
   }
 
-  state.wallet += amount;
+  adjustWallet(amount);
   state.spinMessage = `Wallet +$${formatMoney(amount)}`;
   state.popup = null;
   state.pendingReveal = null;
@@ -567,7 +815,7 @@ function placeBet(betId, amount) {
     return;
   }
 
-  state.wallet -= betAmount;
+  adjustWallet(-betAmount);
   state.popup = null;
   state.pendingReveal = null;
   state.selectedAmount = betAmount;
@@ -589,7 +837,7 @@ function clearBets() {
   }
 
   const refund = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
-  state.wallet += refund;
+  adjustWallet(refund);
   state.bets = [];
   state.hoverBetId = null;
   state.spinMessage = `Returned $${formatMoney(refund)}`;
@@ -613,7 +861,7 @@ function repeatBets() {
   }
 
   for (const bet of state.lastRoundTemplate) {
-    state.wallet -= bet.amount;
+    adjustWallet(-bet.amount);
     state.bets.push({
       betId: bet.betId,
       amount: bet.amount,
@@ -657,7 +905,7 @@ function spinWheel() {
 
   const totalStaked = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
   const net = payout - totalStaked;
-  state.wallet += payout;
+  adjustWallet(payout);
 
   state.lastSpin = {
     winningNumber,
@@ -755,6 +1003,7 @@ function chipClassForValue(value) {
 
 function render() {
   walletBalance.textContent = `$${formatMoney(state.wallet)}`;
+  renderAuthPanel();
   if (state.currentScreen === "menu") {
     appView.innerHTML = renderMenu();
   } else if (state.currentScreen === "roulette") {
@@ -1106,7 +1355,7 @@ function placeBlackjackBet(amount) {
     return;
   }
 
-  state.wallet -= chip;
+  adjustWallet(-chip);
   bj.phase = "betting";
   bj.wager += chip;
   bj.wagerChips.push(chip);
@@ -1121,7 +1370,7 @@ function placeBlackjackBet(amount) {
 function clearBlackjackBet() {
   const bj = state.blackjack;
   if (!["betting", "round-over"].includes(bj.phase) || !bj.wager) return;
-  state.wallet += bj.wager;
+  adjustWallet(bj.wager);
   bj.wager = 0;
   bj.wagerChips = [];
   bj.phase = "betting";
@@ -1140,7 +1389,7 @@ function repeatBlackjackBet() {
     return;
   }
 
-  state.wallet -= bj.lastWager;
+  adjustWallet(-bj.lastWager);
   bj.phase = "betting";
   bj.wager = bj.lastWager;
   bj.wagerChips = buildChipListForAmount(bj.lastWager);
@@ -1254,7 +1503,7 @@ function playerStand() {
 function playerDouble() {
   const bj = state.blackjack;
   if (!canDoubleBlackjack()) return;
-  state.wallet -= bj.wager;
+  adjustWallet(-bj.wager);
   bj.wager *= 2;
   bj.wagerChips = [...bj.wagerChips, ...bj.wagerChips];
   bj.player.push(drawBlackjackCard());
@@ -1325,7 +1574,7 @@ function scheduleDealerDrawStep() {
 
 function payoutBlackjackRound(title, detail, returnedAmount, net, tone, delay = 1000) {
   const bj = state.blackjack;
-  if (returnedAmount > 0) state.wallet += returnedAmount;
+  if (returnedAmount > 0) adjustWallet(returnedAmount);
   bj.phase = "betting";
   bj.dealerReveal = true;
   bj.result = { title, detail, tone };
@@ -1454,3 +1703,4 @@ window.advanceTime = () => {
 };
 
 render();
+initializeAuth();

@@ -14,6 +14,28 @@
           <p class="brand-mark">Gamblers</p>
           <h1 class="brand-title">Roulette Room</h1>
         </div>
+        <div class="auth-panel" id="auth-panel">
+          <form class="auth-form" id="auth-form">
+            <label>
+              <span>Email</span>
+              <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com">
+            </label>
+            <label>
+              <span>Password</span>
+              <input id="auth-password" type="password" autocomplete="current-password" placeholder="Password">
+            </label>
+            <div class="auth-actions">
+              <button id="login-btn" class="action-button" type="submit">Log in</button>
+              <button id="signup-btn" class="action-button accent" type="button">Sign up</button>
+            </div>
+          </form>
+          <div class="account-card hidden" id="account-card">
+            <p class="wallet-label">Signed in</p>
+            <strong id="account-email">Account</strong>
+            <button id="logout-btn" class="action-button" type="button">Log out</button>
+          </div>
+          <p class="auth-message" id="auth-message">Wallet saves after you log in.</p>
+        </div>
         <div class="wallet-panel">
           <div>
             <p class="wallet-label">Wallet</p>
@@ -30,6 +52,8 @@
       <main id="app-view" class="app-view"></main>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="game.js"></script>
   </body>
 </html>

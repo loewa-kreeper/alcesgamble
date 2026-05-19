@@ -88,6 +88,59 @@ button {
   justify-content: flex-end;
 }
 
+.auth-panel {
+  min-width: min(480px, 100%);
+  display: grid;
+  gap: 8px;
+}
+
+.auth-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-form span,
+.auth-message {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-card strong {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-message {
+  margin: 0;
+  text-align: right;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .funds-control {
   display: grid;
   gap: 6px;
@@ -883,6 +936,18 @@ input {
 
   .wallet-panel {
     justify-content: start;
+  }
+
+  .auth-form {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-message {
+    text-align: left;
+  }
+
+  .account-card {
+    justify-content: flex-start;
   }
 
   .wallet-tray {
