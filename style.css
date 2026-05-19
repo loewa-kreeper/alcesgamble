@@ -357,6 +357,12 @@ input {
   min-width: min(420px, 100%);
 }
 
+.result-board.pending {
+  border-color: rgba(244, 231, 207, 0.26);
+  background: linear-gradient(180deg, rgba(38, 47, 45, 0.5), rgba(18, 24, 23, 0.34));
+  animation: resultPulse 900ms ease-in-out infinite;
+}
+
 .result-main {
   font-size: clamp(28px, 4vw, 44px);
   font-weight: 800;
@@ -443,6 +449,27 @@ input {
   cursor: pointer;
 }
 
+@keyframes resultPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.015);
+    opacity: 1;
+  }
+}
+
+@keyframes rouletteWheelSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 .table-frame {
   padding: 8px;
   border-radius: 8px;
@@ -462,6 +489,38 @@ input {
   border-radius: 8px;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.roulette-wheel-window {
+  position: absolute;
+  left: 9.8%;
+  top: 14.8%;
+  width: 27.2%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.roulette-ball-orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.roulette-ball {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 10%;
+  aspect-ratio: 1;
+  margin-left: -5%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fffdf3, #e4d7ae 58%, #9a8e62);
+  box-shadow: 0 0 14px rgba(255, 243, 189, 0.55);
+}
+
+.roulette-wheel-window.spinning .roulette-ball-orbit {
+  animation: rouletteWheelSpin 850ms linear infinite;
 }
 
 .bet-zone {
@@ -718,15 +777,10 @@ input {
 }
 
 .card-back-inner {
-  border: 2px solid #cfb36f;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      #24374d,
-      #24374d 6px,
-      #1a2434 6px,
-      #1a2434 12px
-    );
+  background-image: url("back%20card.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  image-rendering: pixelated;
 }
 
 .blackjack-pot {

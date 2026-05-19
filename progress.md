@@ -22,6 +22,10 @@ Original prompt: create a new web game project in C:\Users\Lev\web games named g
 - Implemented blackjack round logic: shuffled deck, dealer turn, pushes, doubles, standard wins, and 3:2 blackjack payout.
 - Fixed post-round flow so blackjack can accept fresh bets again after a hand resolves instead of getting stuck.
 - Added a shared result popup overlay for both roulette and blackjack that shows win/loss outcome and amount before continuing.
+- Added short resolving states before results: roulette now shows a spinning phase, and blackjack shows a dealer-settling phase before the popup appears.
+- Reworked popup dismissal so the continue buttons close reliably instead of feeling dead.
+- Replaced the hidden blackjack card back with `back card.png`.
+- Changed roulette from a text-only resolve delay to a visible spinning-wheel/ball animation over the table art.
 
 ## TODO
 

@@ -6,6 +6,8 @@ const TABLE_ASPECT = 1790 / 887;
 const state = {
   currentScreen: "menu",
   popup: null,
+  pendingReveal: null,
+  rouletteSpinActive: false,
   wallet: 0,
   selectedAmount: 10,
   selectedBetId: "straight-0",
@@ -35,6 +37,9 @@ const dragState = {
   ghost: null,
 };
 
+let pendingPopupTimer = null;
+const pendingUiTimers = new Set();
+
 const betDefinitions = buildBetDefinitions();
 
 const appView = document.getElementById("app-view");
@@ -47,20 +52,33 @@ addFundsButton.addEventListener("click", () => {
 });
 
 appView.addEventListener("click", (event) => {
+  if (event.target.closest(".game-popup-card") && !event.target.closest("[data-action]")) {
+    event.stopPropagation();
+    return;
+  }
+
   const actionTarget = event.target.closest("[data-action]");
   if (!actionTarget) return;
 
   const action = actionTarget.dataset.action;
 
   if (action === "open-roulette") {
+    clearPendingPopupTimer();
     state.currentScreen = "roulette";
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
     state.spinMessage = "Drag a chip onto the table.";
     render();
     return;
   }
 
   if (action === "open-blackjack") {
+    clearPendingPopupTimer();
     state.currentScreen = "blackjack";
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
     state.blackjack.message = state.blackjack.wager ? `Bet $${formatMoney(state.blackjack.wager)}` : "Place chips, then deal.";
     render();
     return;
@@ -70,12 +88,18 @@ appView.addEventListener("click", (event) => {
     state.currentScreen = "menu";
     state.hoverBetId = null;
     state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    clearPendingPopupTimer();
     render();
     return;
   }
 
   if (action === "close-popup") {
     state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    clearPendingPopupTimer();
     render();
     return;
   }
@@ -486,7 +510,37 @@ function addFundsFromInput() {
   state.wallet += amount;
   state.spinMessage = `Wallet +$${formatMoney(amount)}`;
   state.popup = null;
+  state.pendingReveal = null;
   render();
+}
+
+function clearPendingPopupTimer() {
+  if (pendingPopupTimer) {
+    clearTimeout(pendingPopupTimer);
+    pendingPopupTimer = null;
+  }
+  for (const timer of pendingUiTimers) {
+    clearTimeout(timer);
+  }
+  pendingUiTimers.clear();
+}
+
+function scheduleUiTask(fn, delay) {
+  const timer = window.setTimeout(() => {
+    pendingUiTimers.delete(timer);
+    fn();
+  }, delay);
+  pendingUiTimers.add(timer);
+  return timer;
+}
+
+function openPopupWithDelay(popup, delay = 900) {
+  clearPendingPopupTimer();
+  pendingPopupTimer = scheduleUiTask(() => {
+    state.popup = popup;
+    pendingPopupTimer = null;
+    render();
+  }, delay);
 }
 
 function moveSelection(offset) {
@@ -515,6 +569,7 @@ function placeBet(betId, amount) {
 
   state.wallet -= betAmount;
   state.popup = null;
+  state.pendingReveal = null;
   state.selectedAmount = betAmount;
   state.selectedBetId = betId;
   state.bets.push({
@@ -539,6 +594,7 @@ function clearBets() {
   state.hoverBetId = null;
   state.spinMessage = `Returned $${formatMoney(refund)}`;
   state.popup = null;
+  state.pendingReveal = null;
   render();
 }
 
@@ -624,16 +680,29 @@ function spinWheel() {
   state.bets = [];
   state.selectedBetId = `straight-${winningNumber}`;
   state.hoverBetId = null;
-  state.spinMessage = net >= 0
-    ? `${winningNumber} ${winningColor} +$${formatMoney(net)}`
-    : `${winningNumber} ${winningColor} -$${formatMoney(Math.abs(net))}`;
-  state.popup = {
+  state.popup = null;
+  state.rouletteSpinActive = true;
+  state.pendingReveal = {
+    game: "roulette",
+    title: "Spinning",
+    detail: "Ball is rolling...",
+  };
+  state.spinMessage = "Spinning...";
+  render();
+  openPopupWithDelay({
     tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
     title: `${winningNumber} ${winningColor.toUpperCase()}`,
     detail: net > 0 ? `Won $${formatMoney(net)}` : net < 0 ? `Lost $${formatMoney(Math.abs(net))}` : "Push",
     buttonLabel: "Keep Playing",
-  };
-  render();
+  }, 1100);
+  scheduleUiTask(() => {
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    state.spinMessage = net >= 0
+      ? `${winningNumber} ${winningColor} +$${formatMoney(net)}`
+      : `${winningNumber} ${winningColor} -$${formatMoney(Math.abs(net))}`;
+    render();
+  }, 700);
 }
 
 function startChipDrag(chipValue, x, y) {
@@ -766,6 +835,11 @@ function renderRoulette() {
       <div class="table-frame">
         <div class="table-asset" style="aspect-ratio:${TABLE_ASPECT}">
           <img class="table-image" src="roulette table.png" alt="Roulette table">
+          <div class="roulette-wheel-window ${state.rouletteSpinActive ? "spinning" : ""}">
+            <div class="roulette-ball-orbit">
+              <div class="roulette-ball"></div>
+            </div>
+          </div>
           ${renderBetZones()}
           ${renderPlacedChips()}
           ${renderControlButtons()}
@@ -787,6 +861,15 @@ function renderRoulette() {
 }
 
 function renderResultBoard(lastSpin) {
+  if (state.pendingReveal && state.pendingReveal.game === "roulette") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
   if (!lastSpin) {
     return `
       <div class="result-board idle">
@@ -873,7 +956,7 @@ function renderPopup() {
   if (!state.popup) return "";
   return `
     <div class="game-popup-backdrop" data-action="close-popup">
-      <div class="game-popup ${state.popup.tone}" onclick="event.stopPropagation()">
+      <div class="game-popup game-popup-card ${state.popup.tone}">
         <div class="game-popup-title">${escapeHtml(state.popup.title)}</div>
         <div class="game-popup-detail">${escapeHtml(state.popup.detail)}</div>
         <button class="popup-button" data-action="close-popup">${escapeHtml(state.popup.buttonLabel || "Continue")}</button>
@@ -884,6 +967,14 @@ function renderPopup() {
 
 function renderBlackjackResult() {
   const bj = state.blackjack;
+  if (state.pendingReveal && state.pendingReveal.game === "blackjack") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
   const tone = bj.result ? bj.result.tone : "idle";
   const title = bj.result ? bj.result.title : "Blackjack";
   const detail = bj.result ? bj.result.detail : bj.message;
@@ -1021,6 +1112,7 @@ function placeBlackjackBet(amount) {
   bj.wagerChips.push(chip);
   bj.message = `Bet $${formatMoney(bj.wager)}`;
   bj.result = null;
+  state.pendingReveal = null;
   state.popup = null;
   state.selectedAmount = chip;
   render();
@@ -1034,6 +1126,7 @@ function clearBlackjackBet() {
   bj.wagerChips = [];
   bj.phase = "betting";
   bj.message = "Bet cleared.";
+  state.pendingReveal = null;
   state.popup = null;
   render();
 }
@@ -1053,6 +1146,7 @@ function repeatBlackjackBet() {
   bj.wagerChips = buildChipListForAmount(bj.lastWager);
   bj.message = `Bet $${formatMoney(bj.wager)}`;
   bj.result = null;
+  state.pendingReveal = null;
   state.popup = null;
   render();
 }
@@ -1089,6 +1183,9 @@ function startBlackjackRound() {
   const bj = state.blackjack;
   if (!canDealBlackjack()) return;
 
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = null;
   resetBlackjackTable();
   bj.phase = "player-turn";
   bj.lastWager = bj.wager;
@@ -1129,7 +1226,7 @@ function playerHit() {
   const total = handValue(bj.player).total;
   if (total > 21) {
     bj.dealerReveal = true;
-    payoutBlackjackRound("Bust", `Lost $${formatMoney(bj.wager)}`, 0, -bj.wager, "loss");
+    payoutBlackjackRound("Bust", `Lost $${formatMoney(bj.wager)}`, 0, -bj.wager, "loss", 850);
   } else {
     bj.message = total === 21 ? "21. Stand or wait." : "Hit, stand, or double.";
     render();
@@ -1140,17 +1237,18 @@ function playerStand() {
   const bj = state.blackjack;
   if (bj.phase !== "player-turn") return;
   bj.phase = "dealer-turn";
-  bj.dealerReveal = true;
-
-  while (true) {
-    const dealerValue = handValue(bj.dealer);
-    if (dealerValue.total > 21) break;
-    if (dealerValue.total > 17) break;
-    if (dealerValue.total === 17 && !dealerValue.soft) break;
-    bj.dealer.push(drawBlackjackCard());
-  }
-
-  resolveDealerOutcome();
+  state.popup = null;
+  state.pendingReveal = {
+    game: "blackjack",
+    title: "Dealer Turn",
+    detail: "Dealer reveals the hole card...",
+  };
+  render();
+  scheduleUiTask(() => {
+    bj.dealerReveal = true;
+    render();
+    scheduleDealerDrawStep();
+  }, 500);
 }
 
 function playerDouble() {
@@ -1163,7 +1261,7 @@ function playerDouble() {
   const total = handValue(bj.player).total;
   if (total > 21) {
     bj.dealerReveal = true;
-    payoutBlackjackRound("Bust", `Lost $${formatMoney(bj.wager)}`, 0, -bj.wager, "loss");
+    payoutBlackjackRound("Bust", `Lost $${formatMoney(bj.wager)}`, 0, -bj.wager, "loss", 850);
     return;
   }
   playerStand();
@@ -1192,7 +1290,40 @@ function resolveDealerOutcome() {
   payoutBlackjackRound("Push", "Bet returned.", bj.wager, 0, "idle");
 }
 
-function payoutBlackjackRound(title, detail, returnedAmount, net, tone) {
+function shouldDealerHit() {
+  const dealerValue = handValue(state.blackjack.dealer);
+  if (dealerValue.total < 17) return true;
+  if (dealerValue.total === 17 && dealerValue.soft) return true;
+  return false;
+}
+
+function scheduleDealerDrawStep() {
+  const bj = state.blackjack;
+  if (bj.phase !== "dealer-turn") return;
+
+  if (!shouldDealerHit()) {
+    state.pendingReveal = null;
+    resolveDealerOutcome();
+    return;
+  }
+
+  state.pendingReveal = {
+    game: "blackjack",
+    title: "Dealer Turn",
+    detail: "Dealer draws...",
+  };
+  render();
+
+  scheduleUiTask(() => {
+    bj.dealer.push(drawBlackjackCard());
+    render();
+    scheduleUiTask(() => {
+      scheduleDealerDrawStep();
+    }, 500);
+  }, 650);
+}
+
+function payoutBlackjackRound(title, detail, returnedAmount, net, tone, delay = 1000) {
   const bj = state.blackjack;
   if (returnedAmount > 0) state.wallet += returnedAmount;
   bj.phase = "betting";
@@ -1201,13 +1332,19 @@ function payoutBlackjackRound(title, detail, returnedAmount, net, tone) {
   bj.message = detail;
   bj.wager = 0;
   bj.wagerChips = [];
-  state.popup = {
+  state.popup = null;
+  state.pendingReveal = {
+    game: "blackjack",
+    title: "Resolving",
+    detail: "Dealer settles the hand...",
+  };
+  render();
+  openPopupWithDelay({
     tone,
     title,
     detail,
     buttonLabel: "Next Hand",
-  };
-  render();
+  }, delay);
 }
 
 function renderBetZones() {
