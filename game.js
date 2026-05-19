@@ -10,16 +10,16 @@ const SLOT_COLS = 5;
 const SLOT_HIGH_PATTERN_BOOST = 0.2;
 const JOKU_HAND_SIZE = 5;
 const JOKU_PAYOUTS = [
-  { rank: "Royal Flush", reward: 300 },
-  { rank: "Straight Flush", reward: 190 },
-  { rank: "Four of a Kind", reward: 140 },
-  { rank: "Full House", reward: 84 },
+  { rank: "Royal Flush", reward: 200 },
+  { rank: "Straight Flush", reward: 130 },
+  { rank: "Four of a Kind", reward: 100 },
+  { rank: "Full House", reward: 75 },
   { rank: "Flush", reward: 60 },
-  { rank: "Straight", reward: 48 },
-  { rank: "Three of a Kind", reward: 32 },
-  { rank: "Two Pair", reward: 20 },
+  { rank: "Straight", reward: 40 },
+  { rank: "Three of a Kind", reward: 20 },
+  { rank: "Two Pair", reward: 15 },
   { rank: "Pair", reward: 10 },
-  { rank: "High Card", reward: 4 },
+  { rank: "High Card", reward: 5 },
 ];
 const SLOT_PATTERNS = [
   { name: "HOR", multiplier: 1, variants: buildSlotHorizontalVariants(3) },
@@ -101,6 +101,20 @@ const state = {
     result: null,
     message: "Select 5 cards to form a hand.",
   },
+  yahtzee: {
+    phase: "ready", // ready, rolling, scorecard
+    dice: [1, 1, 1, 1, 1],
+    kept: [false, false, false, false, false],
+    rollsLeft: 3,
+    scores: {
+      ones: null, twos: null, threes: null, fours: null, fives: null, sixes: null,
+      threeKind: null, fourKind: null, fullHouse: null, smallStraight: null, largeStraight: null,
+      yahtzee: null, chance: null
+    },
+    message: "Roll the dice to start!",
+    bonus: 0,
+    total: 0
+  }
 };
 
 const dragState = {
@@ -221,6 +235,17 @@ appView.addEventListener("click", (event) => {
     render();
     return;
   }
+  if (action === "open-yahtzee") {
+    clearPendingPopupTimer();
+    state.currentScreen = "yahtzee";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    initYahtzee();
+    render();
+    return;
+  }
 
   if (action === "go-menu") {
     state.currentScreen = "menu";
@@ -315,6 +340,18 @@ appView.addEventListener("click", (event) => {
   }
   if (action === "joku-play") {
     playJokuHand();
+    return;
+  }
+  if (action === "yahtzee-roll") {
+    rollYahtzeeDice();
+    return;
+  }
+  if (action === "yahtzee-toggle-die") {
+    toggleYahtzeeDie(Number(actionTarget.dataset.index));
+    return;
+  }
+  if (action === "yahtzee-score-category") {
+    scoreYahtzeeCategory(actionTarget.dataset.category);
     return;
   }
 });
@@ -478,6 +515,19 @@ window.addEventListener("keydown", (event) => {
     if (key === "enter" || key === " ") {
       event.preventDefault();
       playJokuHand();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "yahtzee") {
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      rollYahtzeeDice();
+      return;
+    }
+    if (key >= "1" && key <= "5") {
+      toggleYahtzeeDie(Number(key) - 1);
       return;
     }
     return;
@@ -1236,6 +1286,8 @@ function render() {
     appView.innerHTML = renderBlackjack();
   } else if (state.currentScreen === "slots") {
     appView.innerHTML = renderSlots();
+  } else if (state.currentScreen === "yahtzee") {
+    appView.innerHTML = renderYahtzee();
   } else {
     appView.innerHTML = renderJoku();
   }
@@ -1290,7 +1342,19 @@ function renderMenu() {
             <div class="game-card-copy">
               <p class="game-tag">Free play</p>
               <h3>JØKU</h3>
-              <p>Draw five cards for free, score the hand, and add the reward straight to your wallet.</p>
+              <p>Find combinations of 5 cards on a 5x5 grid to earn rewards and build your stack.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-yahtzee">
+            <div class="yahtzee-menu-art">
+              <div class="yahtzee-die">⚄</div>
+              <div class="yahtzee-die">⚅</div>
+              <div class="yahtzee-die">⚂</div>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Free play</p>
+              <h3>Yahtzee</h3>
+              <p>Classic Kniffel. Roll the dice, fill your card, and earn a reward equal to 1.5x your total score!</p>
             </div>
           </button>
         </div>
@@ -1300,7 +1364,7 @@ function renderMenu() {
         <div>
           <p class="menu-eyebrow">Casino</p>
           <h2>Two tables, one wallet</h2>
-          <p class="menu-copy">Top up the wallet in the header, bounce between the tables, or build your stack for free in JØKU.</p>
+          <p class="menu-copy">Top up the wallet in the header, bounce between the tables, or build your stack for free in JØKU and Yahtzee.</p>
         </div>
         <div class="menu-stats">
           <div class="menu-stat">
@@ -1309,7 +1373,7 @@ function renderMenu() {
           </div>
           <div class="menu-stat">
             <p class="game-tag">Tables</p>
-            <strong>4</strong>
+            <strong>5</strong>
           </div>
           <div class="menu-stat">
             <p class="game-tag">Level</p>
@@ -1723,6 +1787,7 @@ function renderCard(card) {
 }
 
 function currentMenuNote() {
+  if (state.yahtzee.message !== "Roll the dice to start!" && state.yahtzee.message !== "Turn complete. Roll to start next turn.") return state.yahtzee.message;
   if (state.joku.result) return state.joku.message;
   if (state.blackjack.result) return state.blackjack.result.detail;
   if (state.slot.result) return state.slot.message;
@@ -2595,6 +2660,16 @@ window.render_game_to_text = () => JSON.stringify({
     message: state.joku.message,
     canLoseMoney: false,
   },
+  yahtzee: {
+    phase: state.yahtzee.phase,
+    dice: state.yahtzee.dice,
+    kept: state.yahtzee.kept,
+    rollsLeft: state.yahtzee.rollsLeft,
+    scores: state.yahtzee.scores,
+    total: state.yahtzee.total,
+    bonus: state.yahtzee.bonus,
+    message: state.yahtzee.message,
+  },
   message: state.spinMessage,
   dragActive: dragState.active,
   availableGames: ["roulette", "blackjack", "slots", "joku"],
@@ -2621,3 +2696,229 @@ window.advanceTime = (ms = 0) => {
 
 render();
 initializeAuth();
+
+/* Yahtzee Game Logic */
+function initYahtzee() {
+  state.yahtzee = {
+    phase: 'ready',
+    dice: [1, 2, 3, 4, 5],
+    kept: [false, false, false, false, false],
+    rollsLeft: 3,
+    scores: {
+      ones: null, twos: null, threes: null, fours: null, fives: null, sixes: null,
+      threeKind: null, fourKind: null, fullHouse: null, smallStraight: null, largeStraight: null,
+      yahtzee: null, chance: null
+    },
+    message: 'Roll the dice to start!',
+    bonus: 0,
+    total: 0
+  };
+}
+
+function rollYahtzeeDice() {
+  const y = state.yahtzee;
+  if (y.rollsLeft <= 0 || y.phase === 'rolling') return;
+
+  y.phase = 'rolling';
+  y.rollsLeft -= 1;
+  y.message = 'Rolling...';
+  render();
+
+  // Animation sequence
+  let ticks = 0;
+  const maxTicks = 8;
+  const interval = setInterval(() => {
+    ticks++;
+    for (let i = 0; i < 5; i++) {
+      if (!y.kept[i]) {
+        y.dice[i] = Math.floor(Math.random() * 6) + 1;
+      }
+    }
+    render();
+
+    if (ticks >= maxTicks) {
+      clearInterval(interval);
+      y.phase = 'ready';
+      y.message = y.rollsLeft === 0 ? 'Last roll! Score your hand.' : `Roll #${3 - y.rollsLeft} complete. Pick dice to keep.`;
+      render();
+    }
+  }, 80);
+}
+
+function toggleYahtzeeDie(index) {
+  const y = state.yahtzee;
+  if (y.rollsLeft === 3 || y.rollsLeft === 0) return;
+  y.kept[index] = !y.kept[index];
+  render();
+}
+
+function scoreYahtzeeCategory(category) {
+  const y = state.yahtzee;
+  if (y.rollsLeft === 3 || y.scores[category] !== null) return;
+
+  const score = calculateYahtzeeScore(category, y.dice);
+  y.scores[category] = score;
+
+  // Reset for next turn
+  y.dice = [1, 1, 1, 1, 1];
+  y.kept = [false, false, false, false, false];
+  y.rollsLeft = 3;
+  y.message = 'Turn complete. Roll to start next turn.';
+
+  updateYahtzeeTotals();
+
+  if (isYahtzeeGameOver()) {
+    const reward = Math.round(y.total * 1.5 * 100) / 100;
+    adjustWallet(reward);
+    awardRoundXp('Yahtzee');
+    y.message = `Game over! Final score: ${y.total}. Received $${formatMoney(reward)} reward.`;
+    openPopupWithDelay({
+      tone: 'win',
+      title: 'Yahtzee Complete',
+      detail: `Final Score: ${y.total}. You earned $${formatMoney(reward)}!`,
+      buttonLabel: 'Play Again'
+    });
+  }
+  render();
+}
+
+function calculateYahtzeeScore(category, dice) {
+  const counts = {};
+  dice.forEach(d => counts[d] = (counts[d] || 0) + 1);
+  const sum = dice.reduce((a, b) => a + b, 0);
+
+  switch (category) {
+    case 'ones': return (counts[1] || 0) * 1;
+    case 'twos': return (counts[2] || 0) * 2;
+    case 'threes': return (counts[3] || 0) * 3;
+    case 'fours': return (counts[4] || 0) * 4;
+    case 'fives': return (counts[5] || 0) * 5;
+    case 'sixes': return (counts[6] || 0) * 6;
+    case 'threeKind': return Object.values(counts).some(c => c >= 3) ? sum : 0;
+    case 'fourKind': return Object.values(counts).some(c => c >= 4) ? sum : 0;
+    case 'fullHouse': {
+      const v = Object.values(counts);
+      return (v.includes(3) && v.includes(2)) || v.includes(5) ? 25 : 0;
+    }
+    case 'smallStraight': {
+      const uniqueDice = [...new Set(dice)].sort((a, b) => a - b).join('');
+      return /1234|2345|3456/.test(uniqueDice) ? 30 : 0;
+    }
+    case 'largeStraight': {
+      const uniqueDice = [...new Set(dice)].sort((a, b) => a - b).join('');
+      return /12345|23456/.test(uniqueDice) ? 40 : 0;
+    }
+    case 'yahtzee': return Object.values(counts).some(c => c === 5) ? 50 : 0;
+    case 'chance': return sum;
+    default: return 0;
+  }
+}
+
+function updateYahtzeeTotals() {
+  const y = state.yahtzee;
+  const upperKeys = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes'];
+  const upperSum = upperKeys.reduce((s, k) => s + (y.scores[k] || 0), 0);
+  y.bonus = upperSum >= 63 ? 35 : 0;
+  const lowerKeys = ['threeKind', 'fourKind', 'fullHouse', 'smallStraight', 'largeStraight', 'yahtzee', 'chance'];
+  const lowerSum = lowerKeys.reduce((s, k) => s + (y.scores[k] || 0), 0);
+  y.total = upperSum + y.bonus + lowerSum;
+}
+
+function isYahtzeeGameOver() {
+  return Object.values(state.yahtzee.scores).every(v => v !== null);
+}
+
+function renderYahtzee() {
+  const y = state.yahtzee;
+  const diceFaces = ['?', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+  return `
+    <section class="yahtzee-screen surface">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderYahtzeeResult()}
+        <div class="status-pill muted">Rolls left: ${y.rollsLeft}</div>
+      </div>
+
+      <div class="yahtzee-felt">
+        <div class="yahtzee-play-area">
+          <div class="yahtzee-dice-container">
+            ${y.dice.map((d, i) => `
+              <button class="yahtzee-die-btn ${y.kept[i] ? 'kept' : ''} ${y.phase === 'rolling' && !y.kept[i] ? 'rolling' : ''}" 
+                      data-action="yahtzee-toggle-die" data-index="${i}"
+                      style="animation-delay: ${i * 0.05}s">
+                ${diceFaces[d]}
+              </button>
+            `).join('')}
+          </div>
+          <div class="yahtzee-controls">
+            <button class="pixel-button green" data-action="yahtzee-roll" ${(y.rollsLeft === 0 || y.phase === 'rolling') ? 'disabled' : ''}>Roll Dice</button>
+          </div>
+        </div>
+
+        <div class="yahtzee-scorecard-container">
+          <table class="yahtzee-scorecard">
+            <thead>
+              <tr><th>Category</th><th>Score</th></tr>
+            </thead>
+            <tbody>
+              ${renderScorecardRow('Ones', 'ones')}
+              ${renderScorecardRow('Twos', 'twos')}
+              ${renderScorecardRow('Threes', 'threes')}
+              ${renderScorecardRow('Fours', 'fours')}
+              ${renderScorecardRow('Fives', 'fives')}
+              ${renderScorecardRow('Sixes', 'sixes')}
+              <tr class="bonus-row">
+                <td>Upper Bonus (35)</td>
+                <td>${y.bonus}</td>
+              </tr>
+              ${renderScorecardRow('3 of a Kind', 'threeKind')}
+              ${renderScorecardRow('4 of a Kind', 'fourKind')}
+              ${renderScorecardRow('Full House', 'fullHouse')}
+              ${renderScorecardRow('Small Straight', 'smallStraight')}
+              ${renderScorecardRow('Large Straight', 'largeStraight')}
+              ${renderScorecardRow('Yahtzee', 'yahtzee')}
+              ${renderScorecardRow('Chance', 'chance')}
+              <tr class="total-row">
+                <td>GRAND TOTAL</td>
+                <td>${y.total}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="joku-free-note">Roll the dice to fill your card and earn 1.5x your score!</div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderYahtzeeResult() {
+  const y = state.yahtzee;
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Yahtzee</div>
+      <div class="result-sub">${escapeHtml(y.message)}</div>
+    </div>
+  `;
+}
+
+function renderScorecardRow(label, key) {
+  const y = state.yahtzee;
+  const isFilled = y.scores[key] !== null;
+  const currentPotential = (y.rollsLeft < 3 && !isFilled) ? calculateYahtzeeScore(key, y.dice) : '';
+
+  return `
+    <tr class="${isFilled ? 'filled' : 'empty'}" ${!isFilled ? `data-action="yahtzee-score-category" data-category="${key}"` : ''}>
+      <td>${label}</td>
+      <td class="score-cell">${isFilled ? y.scores[key] : `<span class="potential">${currentPotential}</span>`}</td>
+    </tr>
+  `;
+}
