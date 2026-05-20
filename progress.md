@@ -89,3 +89,16 @@ Original prompt: create a new web game project in C:\Users\Lev\web games named g
 
 - Apply the updated `supabase-wallet.sql` to the Supabase project before testing leaderboards and settings end-to-end. Until that migration runs, the frontend will report that `public.get_public_leaderboards` does not exist.
 - The same SQL migration is also required for the online dot because it adds `last_seen_at` and `touch_player_presence`.
+
+## 2026-05-20 Later
+
+- Added Plinko, Crash, and Minesweeper as menu games.
+- Plinko and Crash use the shared wallet/chip tray, refund unstarted bets on exit, award XP after resolved rounds, and bias expected value below 1.0 for a real-house casino feel.
+- Minesweeper is free play with no wallet loss, a first-click-safe 9x9 board, flags, flood reveal, and XP only on a completed board.
+- Added text-state coverage for all three new games and verified `node --check game.js` passes.
+- Ran `codex-new-games-visual-test.js` with a seeded $100 wallet: Plinko bet/drop resolved, Crash launched/cashed out, Minesweeper opened and revealed cells, screenshots were inspected, and no browser errors were reported.
+- Tuned follow-up feedback: Crash now launches from 0x with a slower ramp and a minimum crash point before losses can occur, Plinko generates a center-origin path with faster eased/bouncy movement, and Minesweeper now pays $1 per safe tile via a points/cash-out rail while mines forfeit uncashed points.
+- Re-ran verification after the tuning: `node --check game.js`, seeded `codex-new-games-visual-test.js`, and the Playwright web-game client opening Minesweeper all passed. The web-game client still reports the pre-existing single 404 resource noise.
+- Fixed Crash cash-out feedback: the button is enabled during the whole flight, including before 1x, and early cash-out settles as a partial payout/loss. Reworked Plinko into a 16-row, 17-bin board with a 10x/5x/3x/2x/1x/0.8x/0.5x/0.2x/0x mirrored payout ladder and a many-frame center-origin falling path.
+- Verified the follow-up with `node --check game.js`, `codex-new-games-visual-test.js` including a mid-drop Plinko screenshot, and the Playwright web-game client opening Plinko. The only browser-client console entry remains the known 404 resource noise.
+- Hardened Crash cash-out reliability: cash out now also fires on pointer-down while the plane is flying, so frequent multiplier re-renders cannot swallow the click between mouse down/up. `codex-crash-cashout-reliability-test.js` verifies both immediate 0x cash-out and above-1x cash-out before the crash point.

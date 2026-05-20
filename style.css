@@ -340,6 +340,119 @@ input {
       transparent 12px);
 }
 
+.plinko-menu-art,
+.crash-menu-art,
+.mines-menu-art {
+  min-height: 138px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(135deg, #214c38, #101b25);
+}
+
+.plinko-menu-art {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  padding: 20px;
+  align-content: center;
+}
+
+.plinko-menu-art span {
+  width: 12px;
+  height: 12px;
+  justify-self: center;
+  border-radius: 999px;
+  background: #f4d38a;
+  box-shadow: 0 0 12px rgba(244, 211, 138, 0.36);
+}
+
+.plinko-menu-art strong,
+.crash-menu-art strong {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-size: 30px;
+  line-height: 1;
+  color: #f2d58f;
+}
+
+.crash-menu-art {
+  display: grid;
+  place-items: center;
+}
+
+.crash-menu-art::before {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border-left: 2px solid rgba(245, 234, 210, 0.14);
+  border-bottom: 2px solid rgba(245, 234, 210, 0.14);
+}
+
+.crash-menu-plane {
+  width: 76px;
+  height: 34px;
+  border-radius: 18px 42px 18px 8px;
+  background: linear-gradient(180deg, #f4ead2, #c8a45d);
+  transform: translate(12px, -10px) rotate(-18deg);
+  box-shadow: 0 18px 0 -12px rgba(197, 56, 56, 0.85);
+}
+
+.crash-menu-plane::before,
+.crash-menu-plane::after {
+  content: "";
+  position: absolute;
+  background: #b68843;
+}
+
+.crash-menu-plane::before {
+  width: 30px;
+  height: 12px;
+  left: 22px;
+  top: 24px;
+  transform: skewX(-24deg);
+}
+
+.crash-menu-plane::after {
+  width: 18px;
+  height: 18px;
+  left: -4px;
+  top: -8px;
+  clip-path: polygon(0 0, 100% 45%, 0 100%);
+}
+
+.mines-menu-art {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    linear-gradient(135deg, #233447, #101821);
+}
+
+.mines-menu-art span {
+  display: grid;
+  place-items: center;
+  min-height: 16px;
+  border: 2px solid rgba(245, 234, 210, 0.14);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+}
+
+.mines-menu-art span.open {
+  background: #e5d9c1;
+  color: #1d252b;
+}
+
+.mines-menu-art span.mine {
+  background: #842b2b;
+  color: #fff0d0;
+}
+
 .slots-menu-reel {
   min-height: 90px;
   display: grid;
@@ -653,6 +766,14 @@ input {
 }
 
 .joku-screen {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.plinko-screen,
+.crash-screen,
+.minesweeper-screen {
   padding: 16px;
   display: grid;
   gap: 14px;
@@ -1904,6 +2025,308 @@ input {
   background: rgba(7, 16, 14, 0.22);
 }
 
+.plinko-table,
+.crash-table,
+.minesweeper-table {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.plinko-felt,
+.crash-felt,
+.minesweeper-felt {
+  min-height: 560px;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  border: 6px solid rgba(155, 101, 44, 0.58);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(221, 182, 110, 0.12), transparent 30%),
+    linear-gradient(180deg, #286a43, #153f2d);
+}
+
+.plinko-felt,
+.crash-felt {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.plinko-pot,
+.crash-pot {
+  position: relative;
+  min-height: 140px;
+  padding: 16px;
+  border: 4px dashed rgba(255, 239, 184, 0.42);
+  border-radius: 18px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  background: rgba(7, 16, 14, 0.22);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+
+.plinko-pot.hover,
+.plinko-pot:hover,
+.crash-pot.hover,
+.crash-pot:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.plinko-pot span,
+.crash-pot span {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plinko-pot strong,
+.crash-pot strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.plinko-bet-chips,
+.crash-bet-chips {
+  position: absolute;
+  inset: 0;
+}
+
+.plinko-board {
+  position: relative;
+  min-height: 650px;
+  border: 4px solid rgba(245, 234, 210, 0.12);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(4, 9, 8, 0.38), rgba(7, 16, 14, 0.18)),
+    linear-gradient(180deg, #173222, #0c1b15);
+  overflow: hidden;
+}
+
+.plinko-peg {
+  position: absolute;
+  left: calc(50% + ((var(--col) - ((var(--count) - 1) / 2)) * 5.35%));
+  top: calc(5.5% + var(--row) * 4.95%);
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #e5c476;
+  box-shadow: 0 0 12px rgba(229, 196, 118, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+.plinko-ball {
+  position: absolute;
+  left: calc(50% + ((var(--ball-slot) - 8) * 5.05%));
+  top: calc(5% + var(--ball-row) * 4.95%);
+  width: 26px;
+  height: 26px;
+  border: 4px solid #fff5ce;
+  border-radius: 999px;
+  background: #b83232;
+  box-shadow: 0 0 18px rgba(255, 242, 201, 0.42);
+  transform: translate(-50%, -50%) rotate(var(--ball-spin));
+  transition:
+    left 24ms linear,
+    top 24ms linear,
+    transform 24ms linear;
+  z-index: 2;
+}
+
+.plinko-ball::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-top: 3px solid rgba(255, 245, 206, 0.9);
+  border-radius: inherit;
+}
+
+.plinko-bins {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  grid-template-columns: repeat(17, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.plinko-bin {
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(245, 234, 210, 0.12);
+  border-radius: 6px;
+  background: rgba(7, 16, 14, 0.42);
+}
+
+.plinko-bin.hit {
+  background: rgba(221, 182, 110, 0.28);
+  border-color: rgba(245, 234, 210, 0.4);
+}
+
+.plinko-bin strong {
+  font-size: clamp(10px, 1.2vw, 15px);
+}
+
+.plinko-controls,
+.crash-controls,
+.minesweeper-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.crash-sky {
+  position: relative;
+  min-height: 500px;
+  overflow: hidden;
+  border: 4px solid rgba(245, 234, 210, 0.12);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(26, 55, 75, 0.7), rgba(10, 22, 27, 0.85)),
+    linear-gradient(180deg, #1b3348, #0b171c);
+}
+
+.crash-grid-lines {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(245, 234, 210, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 234, 210, 0.08) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: 0.34;
+}
+
+.crash-plane {
+  position: absolute;
+  left: calc(8% + var(--crash-progress) * 58%);
+  bottom: calc(12% + var(--crash-progress) * 50%);
+  width: 92px;
+  height: 38px;
+  border-radius: 20px 48px 20px 8px;
+  background: linear-gradient(180deg, #f4ead2, #c8a45d);
+  transform: rotate(-16deg);
+  transition: left 100ms ease, bottom 100ms ease, transform 120ms ease;
+  box-shadow: 0 20px 0 -13px rgba(197, 56, 56, 0.88);
+  z-index: 2;
+}
+
+.crash-plane::before,
+.crash-plane::after {
+  content: "";
+  position: absolute;
+  background: #b68843;
+}
+
+.crash-plane::before {
+  width: 34px;
+  height: 13px;
+  left: 28px;
+  top: 27px;
+  transform: skewX(-24deg);
+}
+
+.crash-plane::after {
+  width: 20px;
+  height: 20px;
+  left: -4px;
+  top: -9px;
+  clip-path: polygon(0 0, 100% 45%, 0 100%);
+}
+
+.crash-plane.crashed {
+  transform: rotate(28deg);
+  background: linear-gradient(180deg, #ce5750, #7f2622);
+}
+
+.crash-multiplier {
+  position: absolute;
+  left: 28px;
+  top: 24px;
+  font-family: "Baskerville Old Face", "Book Antiqua", Georgia, serif;
+  font-size: clamp(54px, 10vw, 112px);
+  font-weight: 900;
+  line-height: 1;
+  color: #f2d58f;
+  text-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+}
+
+.minesweeper-felt {
+  align-items: center;
+  justify-items: center;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(110, 160, 221, 0.12), transparent 30%),
+    linear-gradient(180deg, #233447, #101821);
+}
+
+.minesweeper-main {
+  width: min(900px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 620px) minmax(220px, 260px);
+  gap: 18px;
+  align-items: start;
+}
+
+.minesweeper-board {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 5px;
+  padding: 12px;
+  border: 4px solid rgba(245, 234, 210, 0.12);
+  border-radius: 12px;
+  background: rgba(7, 16, 14, 0.42);
+}
+
+.minesweeper-rail {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.minesweeper-cell {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(245, 234, 210, 0.13);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #344e5f, #203443);
+  color: #f5ead2;
+  font-weight: 900;
+  font-size: clamp(14px, 3vw, 28px);
+  cursor: pointer;
+}
+
+.minesweeper-cell.revealed {
+  background: #d7cbb4;
+  color: #1b252d;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.minesweeper-cell.flagged {
+  background: linear-gradient(180deg, #a88434, #6c5120);
+}
+
+.minesweeper-cell.count-1 { color: #1f5f91; }
+.minesweeper-cell.count-2 { color: #28774b; }
+.minesweeper-cell.count-3 { color: #9a3730; }
+.minesweeper-cell.count-4,
+.minesweeper-cell.count-5,
+.minesweeper-cell.count-6,
+.minesweeper-cell.count-7,
+.minesweeper-cell.count-8 { color: #6c347f; }
+
 .joku-felt {
   min-height: 600px;
   padding: 24px;
@@ -2108,13 +2531,24 @@ input {
 
   .baccarat-felt,
   .bus-felt,
+  .plinko-felt,
+  .crash-felt,
+  .minesweeper-felt,
   .joku-felt {
     min-height: auto;
   }
 
   .bus-lane,
+  .plinko-felt,
+  .crash-felt,
+  .minesweeper-main,
   .joku-felt {
     grid-template-columns: 1fr;
+  }
+
+  .plinko-controls,
+  .crash-controls {
+    grid-column: auto;
   }
 }
 
@@ -2195,14 +2629,33 @@ input {
   }
 
   .baccarat-felt,
-  .bus-felt {
+  .bus-felt,
+  .plinko-felt,
+  .crash-felt,
+  .minesweeper-felt {
     padding: 14px;
   }
 
   .baccarat-row,
   .bus-track,
+  .plinko-pot,
+  .crash-pot,
   .joku-rail-card {
     padding: 12px;
+  }
+
+  .plinko-board,
+  .crash-sky {
+    min-height: 420px;
+  }
+
+  .minesweeper-board {
+    gap: 3px;
+    padding: 8px;
+  }
+
+  .minesweeper-main {
+    gap: 12px;
   }
 
   .blackjack-pot {

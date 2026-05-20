@@ -26,6 +26,16 @@ const JOKU_PAYOUTS = [
   { rank: "High Card", reward: 5, points: 8 },
 ];
 const BACCARAT_TIE_PAYOUT = 8;
+const PLINKO_ROWS = 16;
+const PLINKO_MULTIPLIERS = [10, 5, 3, 2, 1, 0.8, 0.5, 0.2, 0, 0.2, 0.5, 0.8, 1, 2, 3, 5, 10];
+const CRASH_GROWTH_PER_TICK = 0.035;
+const CRASH_TICK_MS = 120;
+const CRASH_HOUSE_RETURN = 0.94;
+const MIN_CRASH_POINT = 1.35;
+const MINESWEEPER_ROWS = 9;
+const MINESWEEPER_COLS = 9;
+const MINESWEEPER_MINES = 10;
+const MINESWEEPER_POINT_VALUE = 1;
 const RIDE_BUS_STEPS = [
   { id: "red-black", label: "Red or Black", detail: "Guess the next card color.", multiplier: 1.5 },
   { id: "higher-lower", label: "Higher or Lower", detail: "Beat the last card.", multiplier: 2.5 },
@@ -144,6 +154,44 @@ const state = {
     cards: [],
     result: null,
     message: "Place a wager and ride the bus.",
+  },
+  plinko: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    path: [],
+    currentRow: -1,
+    currentSlot: 8,
+    visualRow: -1,
+    visualSlot: 8,
+    ballSpin: 0,
+    result: null,
+    message: "Place chips, then drop.",
+  },
+  crash: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    multiplier: 0,
+    crashPoint: 0,
+    cashedOutAt: 0,
+    result: null,
+    message: "Place a wager and launch.",
+  },
+  minesweeper: {
+    phase: "playing",
+    board: [],
+    revealed: [],
+    flagged: [],
+    firstMove: true,
+    mineCount: MINESWEEPER_MINES,
+    flagsLeft: MINESWEEPER_MINES,
+    points: 0,
+    cashOut: 0,
+    result: null,
+    message: "Clear the board without hitting a mine.",
   },
   yahtzee: {
     phase: "ready", // ready, rolling, scorecard
@@ -304,6 +352,42 @@ appView.addEventListener("click", (event) => {
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
     if (!state.bus.deck.length) initRideTheBus();
+    render();
+    return;
+  }
+
+  if (action === "open-plinko") {
+    clearPendingPopupTimer();
+    state.currentScreen = "plinko";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    state.plinko.message = state.plinko.wager ? `Bet $${formatMoney(state.plinko.wager)}` : "Place chips, then drop.";
+    render();
+    return;
+  }
+
+  if (action === "open-crash") {
+    clearPendingPopupTimer();
+    state.currentScreen = "crash";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    state.crash.message = state.crash.wager ? `Bet $${formatMoney(state.crash.wager)}` : "Place a wager and launch.";
+    render();
+    return;
+  }
+
+  if (action === "open-minesweeper") {
+    clearPendingPopupTimer();
+    resetMinesweeper();
+    state.currentScreen = "minesweeper";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
     render();
     return;
   }
@@ -508,6 +592,71 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "plinko-drop") {
+    dropPlinkoBall();
+    return;
+  }
+
+  if (action === "plinko-bet") {
+    placePlinkoBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "plinko-clear") {
+    clearPlinkoBet();
+    return;
+  }
+
+  if (action === "plinko-repeat") {
+    repeatPlinkoBet();
+    return;
+  }
+
+  if (action === "crash-start") {
+    startCrashRound();
+    return;
+  }
+
+  if (action === "crash-bet") {
+    placeCrashBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "crash-clear") {
+    clearCrashBet();
+    return;
+  }
+
+  if (action === "crash-repeat") {
+    repeatCrashBet();
+    return;
+  }
+
+  if (action === "crash-cashout") {
+    cashOutCrash();
+    return;
+  }
+
+  if (action === "minesweeper-reveal") {
+    revealMinesweeperCell(Number(actionTarget.dataset.index));
+    return;
+  }
+
+  if (action === "minesweeper-flag") {
+    toggleMinesweeperFlag(Number(actionTarget.dataset.index));
+    return;
+  }
+
+  if (action === "minesweeper-cashout") {
+    cashOutMinesweeper();
+    return;
+  }
+
+  if (action === "minesweeper-new") {
+    resetMinesweeper();
+    return;
+  }
+
   if (action === "joku-select") {
     toggleJokuCard(Number(actionTarget.dataset.index));
     return;
@@ -539,6 +688,13 @@ appView.addEventListener("click", (event) => {
 });
 
 appView.addEventListener("pointerdown", (event) => {
+  const crashCashOut = event.target.closest('[data-action="crash-cashout"]');
+  if (crashCashOut && state.currentScreen === "crash" && state.crash.phase === "flying") {
+    event.preventDefault();
+    cashOutCrash();
+    return;
+  }
+
   const chip = event.target.closest("[data-chip-value]");
   if (!chip || chip.dataset.disabled === "true") return;
 
@@ -578,6 +734,10 @@ window.addEventListener("pointerup", (event) => {
       placeBaccaratBet(dropBetId, amount);
     } else if (state.currentScreen === "bus") {
       placeRideTheBusBet(amount);
+    } else if (state.currentScreen === "plinko") {
+      placePlinkoBet(amount);
+    } else if (state.currentScreen === "crash") {
+      placeCrashBet(amount);
     }
   } else {
     render();
@@ -635,6 +795,25 @@ window.addEventListener("keydown", (event) => {
       if (!state.bus.deck.length) initRideTheBus();
       render();
     }
+    if (key === "p") {
+      event.preventDefault();
+      state.currentScreen = "plinko";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "x") {
+      event.preventDefault();
+      state.currentScreen = "crash";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "m") {
+      event.preventDefault();
+      resetMinesweeper();
+      state.currentScreen = "minesweeper";
+      scrollGameToTop();
+      render();
+    }
     if (key === "u") {
       event.preventDefault();
       state.currentScreen = "joku";
@@ -645,7 +824,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "escape" || (key === "b" && !["slots", "baccarat", "bus"].includes(state.currentScreen))) {
+  if (key === "escape" || (key === "b" && !["slots", "baccarat", "bus", "plinko", "crash"].includes(state.currentScreen))) {
     event.preventDefault();
     resetCurrentTableForExit();
     state.currentScreen = "menu";
@@ -787,6 +966,76 @@ window.addEventListener("keydown", (event) => {
     if (key === "c") {
       if (state.bus.phase === "guessing" && state.bus.step > 0) cashOutRideTheBus();
       else clearRideTheBusBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "plinko") {
+    if (key >= "1" && key <= "6") {
+      const chipIndex = Number(key) - 1;
+      state.selectedAmount = CHIP_VALUES[chipIndex];
+      render();
+      return;
+    }
+    if (key === "b") {
+      event.preventDefault();
+      placePlinkoBet(state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      dropPlinkoBall();
+      return;
+    }
+    if (key === "c") {
+      clearPlinkoBet();
+      return;
+    }
+    if (key === "r") {
+      repeatPlinkoBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "crash") {
+    if (key >= "1" && key <= "6") {
+      const chipIndex = Number(key) - 1;
+      state.selectedAmount = CHIP_VALUES[chipIndex];
+      render();
+      return;
+    }
+    if (key === "b") {
+      event.preventDefault();
+      placeCrashBet(state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      if (state.crash.phase === "flying") cashOutCrash();
+      else startCrashRound();
+      return;
+    }
+    if (key === "c") {
+      if (state.crash.phase === "flying") cashOutCrash();
+      else clearCrashBet();
+      return;
+    }
+    if (key === "r") {
+      repeatCrashBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "minesweeper") {
+    if (key === "c") {
+      cashOutMinesweeper();
+      return;
+    }
+    if (key === "n") {
+      resetMinesweeper();
       return;
     }
     return;
@@ -1505,6 +1754,10 @@ function resetCurrentTableForExit() {
     resetBlackjackForNewTable(true);
   } else if (state.currentScreen === "baccarat") {
     resetBaccaratForNewTable(true);
+  } else if (state.currentScreen === "plinko") {
+    resetPlinkoForExit(true);
+  } else if (state.currentScreen === "crash") {
+    resetCrashForExit(true);
   } else if (state.currentScreen === "yahtzee") {
     resetYahtzeeForNewGame();
   }
@@ -1515,6 +1768,12 @@ function resetCurrentTableAfterPopup() {
     resetBlackjackForNewTable(false);
   } else if (state.currentScreen === "baccarat" && state.baccarat.result) {
     resetBaccaratForNewTable(false);
+  } else if (state.currentScreen === "plinko" && state.plinko.result) {
+    preparePlinkoNextRound();
+  } else if (state.currentScreen === "crash" && state.crash.result) {
+    prepareCrashNextRound();
+  } else if (state.currentScreen === "minesweeper" && state.minesweeper.result) {
+    if (state.minesweeper.phase !== "playing" && state.minesweeper.phase !== "won") resetMinesweeper();
   } else if (state.currentScreen === "yahtzee" && isYahtzeeGameOver()) {
     resetYahtzeeForNewGame();
   }
@@ -1752,6 +2011,12 @@ function render() {
     screenHtml = renderBaccarat();
   } else if (state.currentScreen === "bus") {
     screenHtml = renderRideTheBus();
+  } else if (state.currentScreen === "plinko") {
+    screenHtml = renderPlinko();
+  } else if (state.currentScreen === "crash") {
+    screenHtml = renderCrash();
+  } else if (state.currentScreen === "minesweeper") {
+    screenHtml = renderMinesweeper();
   } else if (state.currentScreen === "yahtzee") {
     screenHtml = renderYahtzee();
   } else {
@@ -1934,6 +2199,38 @@ function renderMenu() {
               <p class="game-tag">Live now</p>
               <h3>Ride the Bus</h3>
               <p>Guess a run of cards step by step, then try to keep the bus rolling through the whole shoe.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-plinko">
+            <div class="plinko-menu-art">
+              ${Array.from({ length: 21 }, (_, index) => `<span style="--peg:${index}"></span>`).join("")}
+              <strong>DROP</strong>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Plinko</h3>
+              <p>Drop a chip through the pins. Edges pay loud, the middle keeps the lights on.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-crash">
+            <div class="crash-menu-art">
+              <div class="crash-menu-plane"></div>
+              <strong>2.14x</strong>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Crash</h3>
+              <p>Launch the round, watch the multiplier climb, and cash out before the flight breaks.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-minesweeper">
+            <div class="mines-menu-art">
+              ${Array.from({ length: 25 }, (_, index) => `<span class="${index === 7 ? "mine" : index % 4 === 0 ? "open" : ""}">${index === 7 ? "*" : index % 4 === 0 ? "1" : ""}</span>`).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Free play</p>
+              <h3>Minesweeper</h3>
+              <p>Classic mine clearing with no wager. Mark flags, open cells, and keep the wallet out of it.</p>
             </div>
           </button>
           <button class="game-card" data-action="open-joku">
@@ -2389,6 +2686,9 @@ function currentMenuNote() {
   if (state.yahtzee.message !== "Roll the dice to start!" && state.yahtzee.message !== "Turn complete. Roll to start next turn.") return state.yahtzee.message;
   if (state.baccarat.result) return state.baccarat.result.detail;
   if (state.bus.result) return state.bus.result.detail;
+  if (state.plinko.result) return state.plinko.message;
+  if (state.crash.result) return state.crash.message;
+  if (state.minesweeper.result) return state.minesweeper.message;
   if (state.joku.result) return state.joku.message;
   if (state.blackjack.result) return state.blackjack.result.detail;
   if (state.slot.result) return state.slot.message;
@@ -2863,6 +3163,545 @@ function canSpinSlots() {
 function canRepeatSlots() {
   const slot = state.slot;
   return slot.phase === "betting" && slot.lastWager > 0;
+}
+
+function formatMultiplier(value) {
+  return `${Number(value).toFixed(2).replace(/\.?0+$/, "")}x`;
+}
+
+function canDropPlinko() {
+  const plinko = state.plinko;
+  return plinko.phase === "betting" && plinko.wager > 0;
+}
+
+function canRepeatPlinko() {
+  const plinko = state.plinko;
+  return plinko.phase === "betting" && plinko.lastWager > 0;
+}
+
+function placePlinkoBet(amount) {
+  const plinko = state.plinko;
+  if (plinko.phase !== "betting") {
+    plinko.message = "Wait for the ball to settle.";
+    render();
+    return;
+  }
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (chip > state.wallet) {
+    plinko.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  preparePlinkoNextRound();
+  adjustWallet(-chip);
+  plinko.wager += chip;
+  plinko.wagerChips.push(chip);
+  plinko.message = `Bet $${formatMoney(plinko.wager)}`;
+  state.selectedAmount = chip;
+  state.popup = null;
+  state.pendingReveal = null;
+  render();
+}
+
+function clearPlinkoBet() {
+  const plinko = state.plinko;
+  if (plinko.phase !== "betting" || !plinko.wager) return;
+  adjustWallet(plinko.wager);
+  plinko.wager = 0;
+  plinko.wagerChips = [];
+  plinko.message = "Bet cleared.";
+  plinko.result = null;
+  render();
+}
+
+function repeatPlinkoBet() {
+  const plinko = state.plinko;
+  if (!canRepeatPlinko()) return;
+  if (plinko.lastWager > state.wallet) {
+    plinko.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  preparePlinkoNextRound();
+  adjustWallet(-plinko.lastWager);
+  plinko.wager = plinko.lastWager;
+  plinko.wagerChips = buildChipListForAmount(plinko.lastWager);
+  plinko.message = `Bet $${formatMoney(plinko.wager)}`;
+  render();
+}
+
+function dropPlinkoBall() {
+  const plinko = state.plinko;
+  if (!canDropPlinko()) {
+    plinko.message = "Place chips, then drop.";
+    render();
+    return;
+  }
+  clearPendingPopupTimer();
+  plinko.phase = "dropping";
+  plinko.lastWager = plinko.wager;
+  plinko.path = buildPlinkoPath();
+  plinko.currentRow = -1;
+  plinko.currentSlot = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  plinko.visualRow = -1;
+  plinko.visualSlot = plinko.currentSlot;
+  plinko.ballSpin = 0;
+  plinko.result = null;
+  state.popup = null;
+  state.pendingReveal = {
+    game: "plinko",
+    title: "Dropping",
+    detail: "The chip is bouncing through the pins...",
+  };
+  render();
+  schedulePlinkoFrame(0);
+}
+
+function buildPlinkoPath() {
+  let slot = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  const path = [];
+  for (let row = 0; row < PLINKO_ROWS; row += 1) {
+    const drift = Math.random() < 0.5 ? -1 : 1;
+    slot = Math.max(0, Math.min(PLINKO_MULTIPLIERS.length - 1, slot + drift));
+    path.push(slot);
+  }
+  return path;
+}
+
+function plinkoPathPoint(step) {
+  const center = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  if (step < 0) return { row: -1, slot: center };
+  return {
+    row: step,
+    slot: state.plinko.path[step] ?? center,
+  };
+}
+
+function schedulePlinkoFrame(frame) {
+  const plinko = state.plinko;
+  if (plinko.phase !== "dropping") return;
+  const framesPerRow = 10;
+  const totalFrames = PLINKO_ROWS * framesPerRow;
+  if (frame > totalFrames) {
+    finishPlinkoDrop();
+    return;
+  }
+
+  scheduleUiTask(() => {
+    const segment = Math.min(PLINKO_ROWS - 1, Math.floor(frame / framesPerRow));
+    const localT = (frame % framesPerRow) / framesPerRow;
+    const easedT = localT * localT * (3 - 2 * localT);
+    const from = plinkoPathPoint(segment - 1);
+    const to = plinkoPathPoint(segment);
+    const bounce = Math.sin(localT * Math.PI);
+    const lateralWobble = Math.sin(localT * Math.PI * 2) * 0.08;
+
+    plinko.currentRow = to.row;
+    plinko.currentSlot = to.slot;
+    plinko.visualRow = from.row + (to.row - from.row) * easedT - bounce * 0.16;
+    plinko.visualSlot = from.slot + (to.slot - from.slot) * easedT + lateralWobble;
+    plinko.ballSpin = frame * 18;
+    render();
+    schedulePlinkoFrame(frame + 1);
+  }, 24);
+}
+
+function finishPlinkoDrop() {
+  const plinko = state.plinko;
+  const slot = plinko.path[plinko.path.length - 1] || 0;
+  const multiplier = PLINKO_MULTIPLIERS[slot] || 0;
+  const payout = Math.round(plinko.wager * multiplier * 100) / 100;
+  const net = Math.round((payout - plinko.wager) * 100) / 100;
+  if (payout > 0) adjustWallet(payout);
+  awardRoundXp("Plinko");
+  plinko.phase = "betting";
+  plinko.currentRow = PLINKO_ROWS - 1;
+  plinko.currentSlot = slot;
+  plinko.visualRow = PLINKO_ROWS - 1;
+  plinko.visualSlot = slot;
+  plinko.result = { slot, multiplier, payout, net };
+  plinko.message = net > 0 ? `Won $${formatMoney(net)}` : net < 0 ? `Lost $${formatMoney(Math.abs(net))}` : "Push";
+  plinko.wager = 0;
+  plinko.wagerChips = [];
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+    title: `${formatMultiplier(multiplier)} Plinko`,
+    detail: net > 0 ? `Won $${formatMoney(net)}` : net < 0 ? `Lost $${formatMoney(Math.abs(net))}` : "Bet returned.",
+    buttonLabel: "Drop Again",
+  }, 300);
+}
+
+function preparePlinkoNextRound() {
+  const plinko = state.plinko;
+  plinko.result = null;
+  plinko.path = [];
+  plinko.currentRow = -1;
+  plinko.currentSlot = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  plinko.visualRow = -1;
+  plinko.visualSlot = plinko.currentSlot;
+  plinko.ballSpin = 0;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetPlinkoForExit(refundWager = false) {
+  const plinko = state.plinko;
+  if (refundWager && plinko.phase === "betting" && plinko.wager > 0) adjustWallet(plinko.wager);
+  plinko.phase = "betting";
+  plinko.wager = 0;
+  plinko.wagerChips = [];
+  plinko.message = "Place chips, then drop.";
+  preparePlinkoNextRound();
+}
+
+function canStartCrash() {
+  const crash = state.crash;
+  return crash.phase === "betting" && crash.wager > 0;
+}
+
+function canRepeatCrash() {
+  const crash = state.crash;
+  return crash.phase === "betting" && crash.lastWager > 0;
+}
+
+function placeCrashBet(amount) {
+  const crash = state.crash;
+  if (crash.phase !== "betting") {
+    crash.message = "Cash out or wait for the crash.";
+    render();
+    return;
+  }
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (chip > state.wallet) {
+    crash.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareCrashNextRound();
+  adjustWallet(-chip);
+  crash.wager += chip;
+  crash.wagerChips.push(chip);
+  crash.message = `Bet $${formatMoney(crash.wager)}`;
+  state.selectedAmount = chip;
+  render();
+}
+
+function clearCrashBet() {
+  const crash = state.crash;
+  if (crash.phase !== "betting" || !crash.wager) return;
+  adjustWallet(crash.wager);
+  crash.wager = 0;
+  crash.wagerChips = [];
+  crash.message = "Bet cleared.";
+  crash.result = null;
+  render();
+}
+
+function repeatCrashBet() {
+  const crash = state.crash;
+  if (!canRepeatCrash()) return;
+  if (crash.lastWager > state.wallet) {
+    crash.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareCrashNextRound();
+  adjustWallet(-crash.lastWager);
+  crash.wager = crash.lastWager;
+  crash.wagerChips = buildChipListForAmount(crash.lastWager);
+  crash.message = `Bet $${formatMoney(crash.wager)}`;
+  render();
+}
+
+function startCrashRound() {
+  const crash = state.crash;
+  if (!canStartCrash()) {
+    crash.message = "Place a wager and launch.";
+    render();
+    return;
+  }
+  clearPendingPopupTimer();
+  crash.phase = "flying";
+  crash.lastWager = crash.wager;
+  crash.multiplier = 0;
+  crash.crashPoint = randomCrashPoint();
+  crash.cashedOutAt = 0;
+  crash.result = null;
+  crash.message = "Multiplier is climbing.";
+  state.popup = null;
+  state.pendingReveal = {
+    game: "crash",
+    title: "Flying",
+    detail: "Cash out before the crash.",
+  };
+  render();
+  scheduleCrashTick();
+}
+
+function randomCrashPoint() {
+  const roll = Math.max(0.01, Math.random());
+  const raw = CRASH_HOUSE_RETURN / roll;
+  return Math.max(MIN_CRASH_POINT, Math.min(25, Math.round(raw * 100) / 100));
+}
+
+function scheduleCrashTick() {
+  const crash = state.crash;
+  if (crash.phase !== "flying") return;
+  scheduleUiTask(() => {
+    if (crash.phase !== "flying") return;
+    const climb = crash.multiplier < 1
+      ? 0.08
+      : CRASH_GROWTH_PER_TICK * Math.max(1, crash.multiplier * 0.55);
+    crash.multiplier = Math.round((crash.multiplier + climb) * 100) / 100;
+    if (crash.multiplier >= crash.crashPoint) {
+      finishCrashLoss();
+      return;
+    }
+    crash.message = `Flying at ${formatMultiplier(crash.multiplier)}.`;
+    render();
+    scheduleCrashTick();
+  }, CRASH_TICK_MS);
+}
+
+function cashOutCrash() {
+  const crash = state.crash;
+  if (crash.phase !== "flying") return;
+  clearPendingPopupTimer();
+  const payout = Math.round(crash.wager * crash.multiplier * 100) / 100;
+  const net = Math.round((payout - crash.wager) * 100) / 100;
+  adjustWallet(payout);
+  awardRoundXp("Crash");
+  crash.phase = "betting";
+  crash.cashedOutAt = crash.multiplier;
+  const tone = net > 0 ? "win" : net < 0 ? "loss" : "idle";
+  crash.result = {
+    tone,
+    title: `Cashed ${formatMultiplier(crash.multiplier)}`,
+    detail: net > 0 ? `Won $${formatMoney(net)}` : net < 0 ? `Lost $${formatMoney(Math.abs(net))}` : "Bet returned.",
+    payout,
+    net,
+  };
+  crash.message = crash.result.detail;
+  crash.wager = 0;
+  crash.wagerChips = [];
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone,
+    title: crash.result.title,
+    detail: crash.result.detail,
+    buttonLabel: "Launch Again",
+  }, 250);
+}
+
+function finishCrashLoss() {
+  const crash = state.crash;
+  awardRoundXp("Crash");
+  crash.phase = "betting";
+  crash.multiplier = crash.crashPoint;
+  crash.result = {
+    tone: "loss",
+    title: `Crashed ${formatMultiplier(crash.crashPoint)}`,
+    detail: `Lost $${formatMoney(crash.wager)}`,
+    payout: 0,
+    net: -crash.wager,
+  };
+  crash.message = crash.result.detail;
+  crash.wager = 0;
+  crash.wagerChips = [];
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: "loss",
+    title: crash.result.title,
+    detail: crash.result.detail,
+    buttonLabel: "Launch Again",
+  }, 350);
+}
+
+function prepareCrashNextRound() {
+  const crash = state.crash;
+  crash.result = null;
+  crash.multiplier = 0;
+  crash.crashPoint = 0;
+  crash.cashedOutAt = 0;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetCrashForExit(refundWager = false) {
+  const crash = state.crash;
+  if (refundWager && crash.phase === "betting" && crash.wager > 0) adjustWallet(crash.wager);
+  crash.phase = "betting";
+  crash.wager = 0;
+  crash.wagerChips = [];
+  crash.message = "Place a wager and launch.";
+  prepareCrashNextRound();
+}
+
+function resetMinesweeper() {
+  const total = MINESWEEPER_ROWS * MINESWEEPER_COLS;
+  state.minesweeper = {
+    phase: "playing",
+    board: Array.from({ length: total }, () => ({ mine: false, neighborMines: 0 })),
+    revealed: Array.from({ length: total }, () => false),
+    flagged: Array.from({ length: total }, () => false),
+    firstMove: true,
+    mineCount: MINESWEEPER_MINES,
+    flagsLeft: MINESWEEPER_MINES,
+    points: 0,
+    cashOut: 0,
+    result: null,
+    message: "Clear the board without hitting a mine.",
+  };
+  state.popup = null;
+  state.pendingReveal = null;
+  render();
+}
+
+function buildMinesweeperBoard(safeIndex) {
+  const mines = state.minesweeper;
+  const total = MINESWEEPER_ROWS * MINESWEEPER_COLS;
+  const blocked = new Set([safeIndex, ...minesweeperNeighbors(safeIndex)]);
+  let placed = 0;
+  while (placed < MINESWEEPER_MINES) {
+    const index = Math.floor(Math.random() * total);
+    if (blocked.has(index) || mines.board[index].mine) continue;
+    mines.board[index].mine = true;
+    placed += 1;
+  }
+  for (let index = 0; index < total; index += 1) {
+    mines.board[index].neighborMines = minesweeperNeighbors(index)
+      .filter((neighbor) => mines.board[neighbor].mine).length;
+  }
+}
+
+function minesweeperNeighbors(index) {
+  const row = Math.floor(index / MINESWEEPER_COLS);
+  const col = index % MINESWEEPER_COLS;
+  const neighbors = [];
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = row + dr;
+      const nc = col + dc;
+      if (nr < 0 || nr >= MINESWEEPER_ROWS || nc < 0 || nc >= MINESWEEPER_COLS) continue;
+      neighbors.push(nr * MINESWEEPER_COLS + nc);
+    }
+  }
+  return neighbors;
+}
+
+function revealMinesweeperCell(index) {
+  const mines = state.minesweeper;
+  if (mines.phase !== "playing" || !mines.board[index] || mines.flagged[index] || mines.revealed[index]) return;
+  if (mines.firstMove) {
+    buildMinesweeperBoard(index);
+    mines.firstMove = false;
+  }
+  if (mines.board[index].mine) {
+    mines.revealed = mines.revealed.map((revealed, i) => revealed || mines.board[i].mine);
+    mines.phase = "lost";
+    mines.result = { tone: "loss", title: "Mine Hit" };
+    const lostPoints = mines.points;
+    mines.points = 0;
+    mines.cashOut = 0;
+    mines.message = `Mine hit. Lost ${lostPoints} point${lostPoints === 1 ? "" : "s"}.`;
+    render();
+    openPopupWithDelay({
+      tone: "loss",
+      title: "Mine Hit",
+      detail: `You lost ${lostPoints} point${lostPoints === 1 ? "" : "s"}.`,
+      buttonLabel: "New Board",
+    }, 180);
+    return;
+  }
+  const revealedCount = floodRevealMinesweeper(index);
+  if (revealedCount > 0) {
+    mines.points += revealedCount;
+    mines.cashOut = Math.round(mines.points * MINESWEEPER_POINT_VALUE * 100) / 100;
+  }
+  checkMinesweeperWin();
+  render();
+}
+
+function floodRevealMinesweeper(startIndex) {
+  const mines = state.minesweeper;
+  const queue = [startIndex];
+  const seen = new Set();
+  let revealedCount = 0;
+  while (queue.length) {
+    const index = queue.shift();
+    if (seen.has(index) || mines.flagged[index]) continue;
+    seen.add(index);
+    if (!mines.revealed[index]) revealedCount += 1;
+    mines.revealed[index] = true;
+    if (mines.board[index].neighborMines !== 0) continue;
+    for (const neighbor of minesweeperNeighbors(index)) {
+      if (!mines.revealed[neighbor] && !mines.board[neighbor].mine) queue.push(neighbor);
+    }
+  }
+  return revealedCount;
+}
+
+function toggleMinesweeperFlag(index) {
+  const mines = state.minesweeper;
+  if (mines.phase !== "playing" || !mines.board[index] || mines.revealed[index]) return;
+  if (!mines.flagged[index] && mines.flagsLeft <= 0) return;
+  mines.flagged[index] = !mines.flagged[index];
+  mines.flagsLeft += mines.flagged[index] ? -1 : 1;
+  mines.message = mines.flagged[index] ? "Flag placed." : "Flag removed.";
+  render();
+}
+
+function checkMinesweeperWin() {
+  const mines = state.minesweeper;
+  const safeRevealed = mines.board.every((cell, index) => cell.mine || mines.revealed[index]);
+  if (!safeRevealed) {
+    mines.message = `${mines.points} point${mines.points === 1 ? "" : "s"} ready. Cash out or keep clearing.`;
+    return;
+  }
+  mines.phase = "won";
+  mines.result = { tone: "win", title: "Board Cleared" };
+  mines.message = `Board clear. Cash out $${formatMoney(mines.cashOut)}.`;
+  openPopupWithDelay({
+    tone: "win",
+    title: "Board Cleared",
+    detail: `Cash out ${mines.points} points for $${formatMoney(mines.cashOut)}.`,
+    buttonLabel: "Cash Out",
+  }, 180);
+}
+
+function canCashOutMinesweeper() {
+  const mines = state.minesweeper;
+  return (mines.phase === "playing" || mines.phase === "won") && mines.cashOut > 0;
+}
+
+function cashOutMinesweeper() {
+  const mines = state.minesweeper;
+  if (!canCashOutMinesweeper()) return;
+  const payout = mines.cashOut;
+  adjustWallet(payout);
+  awardRoundXp("Minesweeper");
+  mines.phase = "cashed-out";
+  mines.result = {
+    tone: "win",
+    title: "Cashed Out",
+    payout,
+    points: mines.points,
+  };
+  mines.message = `Cashed out ${mines.points} points for $${formatMoney(payout)}.`;
+  render();
+  openPopupWithDelay({
+    tone: "win",
+    title: "Cashed Out",
+    detail: `You banked $${formatMoney(payout)}.`,
+    buttonLabel: "New Board",
+  }, 180);
 }
 
 function buildChipListForAmount(amount) {
@@ -3348,6 +4187,45 @@ window.render_game_to_text = () => JSON.stringify({
     result: state.bus.result,
     message: state.bus.message,
   },
+  plinko: {
+    phase: state.plinko.phase,
+    wager: state.plinko.wager,
+    path: state.plinko.path,
+    currentRow: state.plinko.currentRow,
+    currentSlot: state.plinko.currentSlot,
+    visualRow: state.plinko.visualRow,
+    visualSlot: state.plinko.visualSlot,
+    multipliers: PLINKO_MULTIPLIERS,
+    result: state.plinko.result,
+    message: state.plinko.message,
+  },
+  crash: {
+    phase: state.crash.phase,
+    wager: state.crash.wager,
+    multiplier: state.crash.multiplier,
+    crashPoint: state.crash.crashPoint,
+    cashedOutAt: state.crash.cashedOutAt,
+    result: state.crash.result,
+    message: state.crash.message,
+  },
+  minesweeper: {
+    phase: state.minesweeper.phase,
+    rows: MINESWEEPER_ROWS,
+    cols: MINESWEEPER_COLS,
+    points: state.minesweeper.points,
+    cashOut: state.minesweeper.cashOut,
+    revealed: state.minesweeper.revealed,
+    flagged: state.minesweeper.flagged,
+    visibleBoard: state.minesweeper.board.map((cell, index) => ({
+      revealed: state.minesweeper.revealed[index],
+      flagged: state.minesweeper.flagged[index],
+      value: state.minesweeper.revealed[index] ? (cell.mine ? "mine" : cell.neighborMines) : null,
+    })),
+    flagsLeft: state.minesweeper.flagsLeft,
+    result: state.minesweeper.result,
+    message: state.minesweeper.message,
+    canLoseMoney: false,
+  },
   yahtzee: {
     phase: state.yahtzee.phase,
     dice: state.yahtzee.dice,
@@ -3360,7 +4238,7 @@ window.render_game_to_text = () => JSON.stringify({
   },
   message: state.spinMessage,
   dragActive: dragState.active,
-  availableGames: ["roulette", "blackjack", "slots", "baccarat", "bus", "joku", "yahtzee"],
+  availableGames: ["roulette", "blackjack", "slots", "baccarat", "bus", "plinko", "crash", "joku", "minesweeper", "yahtzee"],
 });
 
 window.advanceTime = (ms = 0) => {
@@ -4504,6 +5382,270 @@ function busRankValue(rank) {
 
 function renderHandCards(cards) {
   return cards.length ? cards.map((card) => renderCard(card)).join("") : `<div class="bus-empty-hand"></div>`;
+}
+
+function renderPlinko() {
+  const plinko = state.plinko;
+  return `
+    <section class="plinko-screen surface ${escapeAttribute(plinko.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderPlinkoResult()}
+        <div class="status-pill muted">Bet $${formatMoney(plinko.wager)}</div>
+      </div>
+
+      <div class="plinko-table">
+        <div class="plinko-felt">
+          <button class="plinko-pot ${state.hoverBetId === "plinko-main" ? "hover" : ""}" data-action="plinko-bet" data-bet-zone="plinko-main">
+            <span>Drop Pot</span>
+            <strong>$${formatMoney(plinko.wager)}</strong>
+            <div class="plinko-bet-chips">${renderPlinkoWagerChips()}</div>
+          </button>
+          <div class="plinko-board">
+            ${renderPlinkoPegs()}
+            ${renderPlinkoBall()}
+            <div class="plinko-bins">
+              ${PLINKO_MULTIPLIERS.map((multiplier, index) => `
+                <div class="plinko-bin ${plinko.result && plinko.result.slot === index ? "hit" : ""}">
+                  <strong>${formatMultiplier(multiplier)}</strong>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+          <div class="plinko-controls">
+            <button class="pixel-button green" data-action="plinko-drop" ${canDropPlinko() ? "" : "disabled"}>Drop</button>
+            <button class="pixel-button red" data-action="plinko-clear" ${plinko.phase === "betting" && plinko.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="plinko-repeat" ${canRepeatPlinko() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="chip-tray">
+          ${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}
+        </div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderPlinkoResult() {
+  const plinko = state.plinko;
+  if (state.pendingReveal && state.pendingReveal.game === "plinko") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+  if (plinko.result) {
+    const tone = plinko.result.net > 0 ? "win" : plinko.result.net < 0 ? "loss" : "idle";
+    return `
+      <div class="result-board ${tone}">
+        <div class="result-main">${formatMultiplier(plinko.result.multiplier)}</div>
+        <div class="result-sub">${plinko.result.net >= 0 ? "+" : "-"}$${formatMoney(Math.abs(plinko.result.net))}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Plinko</div>
+      <div class="result-sub">${escapeHtml(plinko.message)}</div>
+    </div>
+  `;
+}
+
+function renderPlinkoPegs() {
+  const pegs = [];
+  for (let row = 0; row < PLINKO_ROWS; row += 1) {
+    for (let col = 0; col <= row; col += 1) {
+      pegs.push(`<span class="plinko-peg" style="--row:${row};--col:${col};--count:${row + 1}"></span>`);
+    }
+  }
+  return pegs.join("");
+}
+
+function renderPlinkoBall() {
+  const plinko = state.plinko;
+  if (plinko.phase !== "dropping" && !plinko.result) return "";
+  const row = Math.max(-1, Number.isFinite(plinko.visualRow) ? plinko.visualRow : plinko.currentRow);
+  const slot = Math.max(0, Math.min(PLINKO_MULTIPLIERS.length - 1, Number.isFinite(plinko.visualSlot) ? plinko.visualSlot : plinko.currentSlot));
+  return `<div class="plinko-ball" style="--ball-row:${row};--ball-slot:${slot};--ball-spin:${plinko.ballSpin || 0}deg"></div>`;
+}
+
+function renderPlinkoWagerChips() {
+  if (!state.plinko.wagerChips.length) return "";
+  return state.plinko.wagerChips.map((value, index) => `
+    <div class="placed-chip slot-chip chip-${chipClassForValue(value)}" style="left:${40 + index * 12}px;top:${26 + (index % 2) * 10}px">
+      $${formatChipValue(value)}
+    </div>
+  `).join("");
+}
+
+function renderCrash() {
+  const crash = state.crash;
+  return `
+    <section class="crash-screen surface ${escapeAttribute(crash.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderCrashResult()}
+        <div class="status-pill muted">Bet $${formatMoney(crash.wager)}</div>
+      </div>
+
+      <div class="crash-table">
+        <div class="crash-felt">
+          <button class="crash-pot ${state.hoverBetId === "crash-main" ? "hover" : ""}" data-action="crash-bet" data-bet-zone="crash-main">
+            <span>Flight Bank</span>
+            <strong>$${formatMoney(crash.wager)}</strong>
+            <div class="crash-bet-chips">${renderCrashWagerChips()}</div>
+          </button>
+          <div class="crash-sky">
+            <div class="crash-grid-lines"></div>
+            <div class="crash-plane ${crash.phase === "flying" ? "flying" : crash.phase === "crashed" ? "crashed" : ""}" style="--crash-progress:${Math.max(0, Math.min(1, crash.multiplier / 6))}"></div>
+            <div class="crash-multiplier">${formatMultiplier(crash.multiplier)}</div>
+          </div>
+          <div class="crash-controls">
+            <button class="pixel-button green" data-action="crash-start" ${canStartCrash() ? "" : "disabled"}>Launch</button>
+            <button class="pixel-button gold" data-action="crash-cashout" ${crash.phase === "flying" ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button red" data-action="crash-clear" ${crash.phase === "betting" && crash.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button" data-action="crash-repeat" ${canRepeatCrash() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="chip-tray">
+          ${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}
+        </div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderCrashResult() {
+  const crash = state.crash;
+  if (state.pendingReveal && state.pendingReveal.game === "crash") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+  if (crash.result) {
+    return `
+      <div class="result-board ${crash.result.tone}">
+        <div class="result-main">${escapeHtml(crash.result.title)}</div>
+        <div class="result-sub">${escapeHtml(crash.result.detail)}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Crash</div>
+      <div class="result-sub">${escapeHtml(crash.message)}</div>
+    </div>
+  `;
+}
+
+function renderCrashWagerChips() {
+  if (!state.crash.wagerChips.length) return "";
+  return state.crash.wagerChips.map((value, index) => `
+    <div class="placed-chip slot-chip chip-${chipClassForValue(value)}" style="left:${40 + index * 12}px;top:${26 + (index % 2) * 10}px">
+      $${formatChipValue(value)}
+    </div>
+  `).join("");
+}
+
+function renderMinesweeper() {
+  const mines = state.minesweeper;
+  return `
+    <section class="minesweeper-screen surface ${escapeAttribute(mines.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderMinesweeperResult()}
+        <div class="status-pill muted">Flags ${mines.flagsLeft}</div>
+      </div>
+      <div class="minesweeper-table">
+        <div class="minesweeper-felt">
+          <div class="minesweeper-main">
+            <div class="minesweeper-board">
+              ${mines.board.map((cell, index) => renderMinesweeperCell(cell, index)).join("")}
+            </div>
+            <aside class="minesweeper-rail">
+              <div class="joku-rail-card">
+                <span>Points</span>
+                <strong>${mines.points}</strong>
+              </div>
+              <div class="joku-rail-card">
+                <span>Cash Out</span>
+                <strong>$${formatMoney(mines.cashOut)}</strong>
+              </div>
+              <div class="joku-rail-card">
+                <span>Safe Tiles</span>
+                <strong>${mines.revealed.filter(Boolean).length}</strong>
+              </div>
+              <div class="joku-free-note">${escapeHtml(mines.message)}</div>
+            </aside>
+          </div>
+          <div class="minesweeper-controls">
+            <button class="pixel-button gold" data-action="minesweeper-cashout" ${canCashOutMinesweeper() ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button green" data-action="minesweeper-new">New Game</button>
+          </div>
+        </div>
+      </div>
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="joku-free-note">Each safe tile is 1 point. Cash out before a mine takes the stack.</div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderMinesweeperResult() {
+  const mines = state.minesweeper;
+  const tone = mines.result ? mines.result.tone : "idle";
+  const title = mines.result ? mines.result.title : "Minesweeper";
+  return `
+    <div class="result-board ${tone}">
+      <div class="result-main">${escapeHtml(title)}</div>
+      <div class="result-sub">${escapeHtml(mines.message)}</div>
+    </div>
+  `;
+}
+
+function renderMinesweeperCell(cell, index) {
+  const mines = state.minesweeper;
+  const revealed = mines.revealed[index];
+  const flagged = mines.flagged[index];
+  const label = revealed
+    ? cell.mine ? "*" : cell.neighborMines ? String(cell.neighborMines) : ""
+    : flagged ? "F" : "";
+  return `
+    <button
+      class="minesweeper-cell ${revealed ? "revealed" : ""} ${flagged ? "flagged" : ""} count-${cell.neighborMines || 0}"
+      data-action="${flagged ? "minesweeper-flag" : "minesweeper-reveal"}"
+      data-index="${index}"
+      ${mines.phase !== "playing" ? "disabled" : ""}
+      aria-label="Cell ${index + 1}"
+      oncontextmenu="event.preventDefault(); this.dataset.action='minesweeper-flag'; this.click();"
+    >${escapeHtml(label)}</button>
+  `;
 }
 
 function renderJoku() {
