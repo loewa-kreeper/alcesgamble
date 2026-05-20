@@ -7,6 +7,7 @@ create table if not exists public.player_accounts (
   balance numeric(12, 2) not null default 0 check (balance >= 0),
   xp integer not null default 0 check (xp >= 0),
   is_public boolean not null default true,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint player_accounts_username_format check (username ~ '^[a-z0-9_]{3,20}$')
@@ -21,6 +22,9 @@ alter table public.player_accounts
 alter table public.player_accounts
   add column if not exists is_public boolean not null default true;
 
+alter table public.player_accounts
+  add column if not exists last_seen_at timestamptz;
+
 alter table public.player_accounts enable row level security;
 
 revoke all on public.player_accounts from anon, authenticated;
@@ -32,6 +36,7 @@ drop function if exists public.save_player_wallet(text, text, numeric, integer);
 drop function if exists public.update_player_settings(text, text, text, text, boolean);
 drop function if exists public.delete_player_account(text, text);
 drop function if exists public.get_public_leaderboards();
+drop function if exists public.touch_player_presence(text, text);
 
 create or replace function public.create_player_account(
   p_username text,
@@ -73,6 +78,11 @@ security definer
 set search_path = public
 as $$
 begin
+  update public.player_accounts
+  set last_seen_at = now()
+  where player_accounts.username = lower(trim(p_username))
+    and password_hash = extensions.crypt(p_password, password_hash);
+
   return query
     select id, player_accounts.username, player_accounts.balance, player_accounts.xp, player_accounts.is_public
     from public.player_accounts
@@ -118,6 +128,10 @@ begin
         else player_accounts.password_hash
       end,
       is_public = coalesce(p_is_public, player_accounts.is_public),
+      last_seen_at = case
+        when coalesce(p_is_public, player_accounts.is_public) = true then now()
+        else null
+      end,
       updated_at = now()
     where player_accounts.username = lower(trim(p_username))
       and player_accounts.password_hash = extensions.crypt(p_password, player_accounts.password_hash)
@@ -153,16 +167,54 @@ end;
 $$;
 
 create or replace function public.get_public_leaderboards()
-returns table(username text, balance numeric, xp integer)
+returns table(username text, balance numeric, xp integer, is_online boolean)
 language sql
 security definer
 set search_path = public
 as $$
-  select player_accounts.username, player_accounts.balance, player_accounts.xp
+  select
+    player_accounts.username,
+    player_accounts.balance,
+    player_accounts.xp,
+    coalesce(player_accounts.last_seen_at >= now() - interval '1 minute', false) as is_online
   from public.player_accounts
   where player_accounts.is_public = true
   order by player_accounts.xp desc, player_accounts.balance desc, player_accounts.username asc
   limit 100;
+$$;
+
+create or replace function public.touch_player_presence(
+  p_username text,
+  p_password text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  profile_is_public boolean;
+begin
+  update public.player_accounts
+  set
+    last_seen_at = now(),
+    updated_at = now()
+  where player_accounts.username = lower(trim(p_username))
+    and player_accounts.password_hash = extensions.crypt(p_password, player_accounts.password_hash)
+  returning player_accounts.is_public into profile_is_public;
+
+  if not found then
+    raise exception 'Wrong username or password.';
+  end if;
+
+  if profile_is_public = false then
+    update public.player_accounts
+    set last_seen_at = null
+    where player_accounts.username = lower(trim(p_username));
+  end if;
+
+  return profile_is_public;
+end;
 $$;
 
 create or replace function public.save_player_wallet(
@@ -207,3 +259,4 @@ grant execute on function public.save_player_wallet(text, text, numeric, integer
 grant execute on function public.update_player_settings(text, text, text, text, boolean) to anon, authenticated;
 grant execute on function public.delete_player_account(text, text) to anon, authenticated;
 grant execute on function public.get_public_leaderboards() to anon, authenticated;
+grant execute on function public.touch_player_presence(text, text) to anon, authenticated;

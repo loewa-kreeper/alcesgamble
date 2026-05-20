@@ -372,6 +372,11 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "refresh-leaderboards") {
+    refreshLeaderboards(true);
+    return;
+  }
+
   if (action === "save-settings") {
     updateAccountSettings();
     return;
@@ -1067,6 +1072,7 @@ function setXp(value, save = true) {
 function awardRoundXp(gameName) {
   const beforeLevel = getLevelProgress(state.xp).level;
   setXp(state.xp + XP_PER_ROUND);
+  touchPlayerPresence();
   const afterLevel = getLevelProgress(state.xp).level;
   if (afterLevel > beforeLevel) {
     state.spinMessage = `Level ${afterLevel} reached.`;
@@ -1156,10 +1162,34 @@ async function refreshLeaderboards(force = false) {
       username: entry.username,
       balance: Number(entry.balance) || 0,
       xp: Number(entry.xp) || 0,
+      isOnline: Boolean(entry.is_online),
     }))
     : [];
   leaderboardState.loaded = true;
   if (state.currentScreen === "menu" || menuState.settingsOpen) render();
+}
+
+async function touchPlayerPresence() {
+  if (!authState.account || !authState.walletLoaded || !hasSupabase()) return;
+
+  const { data, error } = await supabaseClient.rpc("touch_player_presence", {
+    p_username: authState.account.username,
+    p_password: authState.account.password,
+  });
+
+  if (error) {
+    return;
+  }
+
+  if (typeof data === "boolean") {
+    authState.account.isPublic = data;
+  } else if (Array.isArray(data) && typeof data[0] === "boolean") {
+    authState.account.isPublic = data[0];
+  }
+
+  if (state.currentScreen === "menu") {
+    refreshLeaderboards(true);
+  }
 }
 
 async function signUpWithUsername() {
@@ -1773,8 +1803,9 @@ function renderLeaderboardCard(board, title, description, type) {
           <p class="menu-eyebrow">${escapeHtml(title)}</p>
           <h3>${escapeHtml(title)} Leaderboard</h3>
         </div>
-        <p class="leaderboard-description">${escapeHtml(description)}</p>
+        <button class="pill-button leaderboard-refresh" data-action="refresh-leaderboards">Refresh</button>
       </div>
+      <p class="leaderboard-description">${escapeHtml(description)}</p>
       ${body}
       ${hasMore ? `<button class="pill-button leaderboard-more" data-action="toggle-leaderboard" data-board="${board}">${expanded ? "Show top 3" : "See more"}</button>` : ""}
     </section>
@@ -1785,12 +1816,16 @@ function renderLeaderboardEntry(entry, rank, type) {
   const youBadge = authState.account && authState.account.username === entry.username
     ? `<span class="leaderboard-you">You</span>`
     : "";
+  const onlineBadge = entry.isOnline
+    ? `<span class="leaderboard-online" aria-label="Online"><span class="leaderboard-online-dot"></span>Online</span>`
+    : "";
   const value = type === "$" ? `$${formatMoney(entry.balance)}` : `${entry.xp} XP`;
   return `
     <div class="leaderboard-entry">
       <div class="leaderboard-rank">#${rank}</div>
       <div class="leaderboard-player">
         <strong>${escapeHtml(entry.username)}</strong>
+        ${onlineBadge}
         ${youBadge}
       </div>
       <div class="leaderboard-value">${escapeHtml(value)}</div>
@@ -1847,7 +1882,7 @@ function renderMenu() {
         </p>
         <div class="game-grid">
           <button class="game-card" data-action="open-roulette">
-            <img src="roulette table.png" alt="Roulette table preview">
+            <img src="roulette-table.png" alt="Roulette table preview">
             <div class="game-card-copy">
               <p class="game-tag">Live now</p>
               <h3>Roulette</h3>
@@ -1960,9 +1995,9 @@ function renderRoulette() {
 
       <div class="table-frame">
         <div class="table-asset" style="aspect-ratio:${TABLE_ASPECT}">
-          <img class="table-image" src="roulette table.png" alt="Roulette table">
+          <img class="table-image" src="roulette-table.png" alt="Roulette table">
           <div class="roulette-wheel-window">
-            <img class="roulette-wheel-disk ${state.rouletteSpinActive ? "spinning" : ""}" src="roulette spin.png" alt="">
+            <img class="roulette-wheel-disk ${state.rouletteSpinActive ? "spinning" : ""}" src="roulette-spin.png" alt="">
             <div class="roulette-ball-orbit ${state.rouletteSpinActive ? "spinning" : ""}">
               <div class="roulette-ball"></div>
             </div>
