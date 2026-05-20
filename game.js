@@ -1,25 +1,36 @@
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const CHIP_VALUES = [1, 5, 10, 25, 100];
+const CHIP_VALUES = [1, 5, 10, 25, 100, 500];
 const numberSequence = Array.from({ length: 36 }, (_, index) => index + 1);
 const TABLE_ASPECT = 1790 / 887;
 const XP_PER_ROUND = 20;
 const FIRST_LEVEL_XP = 100;
 const LEVEL_XP_MULTIPLIER = 2.5;
+const LEADERBOARD_PREVIEW_COUNT = 3;
 const SLOT_ROWS = 3;
 const SLOT_COLS = 5;
-const SLOT_HIGH_PATTERN_BOOST = 0.2;
+const SLOT_HIGH_PATTERN_BOOST = 0.08;
 const JOKU_HAND_SIZE = 5;
+const JOKU_TOTAL_CARDS = 50;
+const JOKU_GRID_SIZE = 25;
+const JOKU_HAND_MULTIPLIER = 0.5;
 const JOKU_PAYOUTS = [
-  { rank: "Royal Flush", reward: 200 },
-  { rank: "Straight Flush", reward: 130 },
-  { rank: "Four of a Kind", reward: 100 },
-  { rank: "Full House", reward: 75 },
-  { rank: "Flush", reward: 60 },
-  { rank: "Straight", reward: 40 },
-  { rank: "Three of a Kind", reward: 20 },
-  { rank: "Two Pair", reward: 15 },
-  { rank: "Pair", reward: 10 },
-  { rank: "High Card", reward: 5 },
+  { rank: "Royal Flush", reward: 200, points: 500 },
+  { rank: "Straight Flush", reward: 130, points: 320 },
+  { rank: "Four of a Kind", reward: 100, points: 220 },
+  { rank: "Full House", reward: 75, points: 150 },
+  { rank: "Flush", reward: 60, points: 120 },
+  { rank: "Straight", reward: 40, points: 90 },
+  { rank: "Three of a Kind", reward: 20, points: 50 },
+  { rank: "Two Pair", reward: 15, points: 35 },
+  { rank: "Pair", reward: 10, points: 20 },
+  { rank: "High Card", reward: 5, points: 8 },
+];
+const BACCARAT_TIE_PAYOUT = 8;
+const RIDE_BUS_STEPS = [
+  { id: "red-black", label: "Red or Black", detail: "Guess the next card color.", multiplier: 1.5 },
+  { id: "higher-lower", label: "Higher or Lower", detail: "Beat the last card.", multiplier: 2.5 },
+  { id: "inside-outside", label: "Inside or Outside", detail: "Guess whether it falls inside the range.", multiplier: 5 },
+  { id: "suit", label: "Suit", detail: "Call the suit to ride the bus.", multiplier: 12 },
 ];
 const SLOT_PATTERNS = [
   { name: "HOR", multiplier: 1, variants: buildSlotHorizontalVariants(3) },
@@ -29,8 +40,8 @@ const SLOT_PATTERNS = [
   { name: "HOR-XL", multiplier: 3, variants: buildSlotHorizontalVariants(5) },
   { name: "ZIG", multiplier: 3, variants: [[[0, 0], [1, 1], [0, 2], [1, 3], [0, 4]]] },
   { name: "ZAG", multiplier: 3, variants: [[[2, 0], [1, 1], [2, 2], [1, 3], [2, 4]]] },
-  { name: "ABOVE", multiplier: 4, variants: [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]]] },
-  { name: "BELOW", multiplier: 4, variants: [[[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]]] },
+  { name: "ABOVE", multiplier: 4, variants: [[[0, 2], [1, 1], [1, 2], [1, 3], [2, 0], [2, 1], [2, 2], [2, 3], [2, 4]]] },
+  { name: "BELOW", multiplier: 4, variants: [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 1], [1, 2], [1, 3], [2, 2]]] },
   { name: "EYE", multiplier: 5, variants: [[[0, 0], [0, 4], [1, 1], [1, 2], [1, 3], [2, 0], [2, 4]]] },
   { name: "JACKPOT", multiplier: 10, variants: [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 0], [1, 1], [1, 2], [1, 3], [1, 4], [2, 0], [2, 1], [2, 2], [2, 3], [2, 4]]] },
 ];
@@ -92,14 +103,47 @@ const state = {
     lastWins: [],
     message: "Place chips, then spin.",
   },
+  baccarat: {
+    phase: "betting",
+    deck: [],
+    playerHand: [],
+    dealerHand: [],
+    revealedPlayerCards: 0,
+    revealedDealerCards: 0,
+    lastRevealedSide: null,
+    lastRevealedIndex: -1,
+    bets: { player: 0, dealer: 0, tie: 0 },
+    betChips: { player: [], dealer: [], tie: [] },
+    selectedBet: "player",
+    result: null,
+    message: "Pick player, dealer, or tie.",
+  },
   joku: {
     phase: "ready",
     deck: [],
     grid: [],
     selectedIndices: [],
     newIndices: [],
+    newCardIndices: [],
+    fallDistances: {},
     result: null,
+    score: 0,
+    cashOut: 0,
+    comboCount: 0,
+    cardsRemaining: 0,
+    endReason: null,
     message: "Select 5 cards to form a hand.",
+  },
+  bus: {
+    phase: "betting",
+    deck: [],
+    wager: 0,
+    wagerChips: [],
+    step: 0,
+    pendingCard: null,
+    cards: [],
+    result: null,
+    message: "Place a wager and ride the bus.",
   },
   yahtzee: {
     phase: "ready", // ready, rolling, scorecard
@@ -133,16 +177,16 @@ const walletBalance = document.getElementById("wallet-balance");
 const playerLevel = document.getElementById("player-level");
 const playerXp = document.getElementById("player-xp");
 const xpFill = document.getElementById("xp-fill");
-const fundsInput = document.getElementById("funds-input");
-const addFundsButton = document.getElementById("add-funds-btn");
 const authForm = document.getElementById("auth-form");
 const authUsername = document.getElementById("auth-username");
 const authPassword = document.getElementById("auth-password");
 const signupButton = document.getElementById("signup-btn");
 const logoutButton = document.getElementById("logout-btn");
+const settingsButton = document.getElementById("settings-btn");
 const authMessage = document.getElementById("auth-message");
 const accountCard = document.getElementById("account-card");
 const accountName = document.getElementById("account-name");
+const accountVisibility = document.getElementById("account-visibility");
 
 const supabaseConfig = window.ALCES_SUPABASE || {};
 const supabaseClient = window.supabase && supabaseConfig.url && !supabaseConfig.url.includes("YOUR-PROJECT-REF")
@@ -155,14 +199,23 @@ const authState = {
   walletLoaded: false,
 };
 
+const leaderboardState = {
+  entries: [],
+  loading: false,
+  loaded: false,
+  error: "",
+};
+
+const menuState = {
+  settingsOpen: false,
+  showAllBalance: false,
+  showAllXp: false,
+};
+
 let walletSaveTimer = null;
 let lastSavedWallet = null;
 let lastSavedXp = null;
 let virtualNow = 0;
-
-addFundsButton.addEventListener("click", () => {
-  addFundsFromInput();
-});
 
 authForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -175,6 +228,12 @@ signupButton.addEventListener("click", () => {
 
 logoutButton.addEventListener("click", () => {
   signOut();
+});
+
+settingsButton.addEventListener("click", () => {
+  if (!authState.account) return;
+  menuState.settingsOpen = true;
+  render();
 });
 
 appView.addEventListener("click", (event) => {
@@ -202,12 +261,12 @@ appView.addEventListener("click", (event) => {
 
   if (action === "open-blackjack") {
     clearPendingPopupTimer();
+    resetBlackjackForNewTable(true);
     state.currentScreen = "blackjack";
     scrollGameToTop();
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
-    state.blackjack.message = state.blackjack.wager ? `Bet $${formatMoney(state.blackjack.wager)}` : "Place chips, then deal.";
     render();
     return;
   }
@@ -220,6 +279,31 @@ appView.addEventListener("click", (event) => {
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
     state.slot.message = state.slot.wager ? `Bet $${formatMoney(state.slot.wager)}` : "Place chips, then spin.";
+    render();
+    return;
+  }
+
+  if (action === "open-baccarat") {
+    clearPendingPopupTimer();
+    resetBaccaratForNewTable(true);
+    state.currentScreen = "baccarat";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    if (!state.baccarat.deck.length) initBaccarat();
+    render();
+    return;
+  }
+
+  if (action === "open-bus") {
+    clearPendingPopupTimer();
+    state.currentScreen = "bus";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    if (!state.bus.deck.length) initRideTheBus();
     render();
     return;
   }
@@ -237,17 +321,18 @@ appView.addEventListener("click", (event) => {
   }
   if (action === "open-yahtzee") {
     clearPendingPopupTimer();
+    resetYahtzeeForNewGame();
     state.currentScreen = "yahtzee";
     scrollGameToTop();
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
-    initYahtzee();
     render();
     return;
   }
 
   if (action === "go-menu") {
+    resetCurrentTableForExit();
     state.currentScreen = "menu";
     scrollGameToTop();
     state.hoverBetId = null;
@@ -255,11 +340,50 @@ appView.addEventListener("click", (event) => {
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
     clearPendingPopupTimer();
+    refreshLeaderboards(true);
     render();
     return;
   }
 
+  if (action === "open-settings") {
+    if (!authState.account) {
+      setAuthMessage("Log in to manage settings.");
+      return;
+    }
+    menuState.settingsOpen = true;
+    render();
+    return;
+  }
+
+  if (action === "close-settings") {
+    menuState.settingsOpen = false;
+    render();
+    return;
+  }
+
+  if (action === "toggle-leaderboard") {
+    const board = actionTarget.dataset.board;
+    if (board === "balance") {
+      menuState.showAllBalance = !menuState.showAllBalance;
+    } else if (board === "xp") {
+      menuState.showAllXp = !menuState.showAllXp;
+    }
+    render();
+    return;
+  }
+
+  if (action === "save-settings") {
+    updateAccountSettings();
+    return;
+  }
+
+  if (action === "delete-account") {
+    deleteAccount();
+    return;
+  }
+
   if (action === "close-popup") {
+    resetCurrentTableAfterPopup();
     state.popup = null;
     state.pendingReveal = null;
     state.rouletteSpinActive = false;
@@ -334,12 +458,65 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "baccarat-deal") {
+    dealBaccaratRound();
+    return;
+  }
+
+  if (action === "baccarat-clear") {
+    clearBaccaratBets();
+    return;
+  }
+
+  if (action === "baccarat-repeat") {
+    repeatBaccaratBets();
+    return;
+  }
+
+  if (action === "baccarat-place") {
+    placeBaccaratBet(actionTarget.dataset.side, state.selectedAmount);
+    return;
+  }
+
+  if (action === "bus-play") {
+    startRideTheBus();
+    return;
+  }
+
+  if (action === "bus-bet") {
+    placeRideTheBusBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "bus-clear") {
+    clearRideTheBusBet();
+    return;
+  }
+
+  if (action === "bus-cashout") {
+    cashOutRideTheBus();
+    return;
+  }
+
+  if (action === "bus-guess") {
+    answerRideTheBusGuess(actionTarget.dataset.guess);
+    return;
+  }
+
   if (action === "joku-select") {
     toggleJokuCard(Number(actionTarget.dataset.index));
     return;
   }
   if (action === "joku-play") {
     playJokuHand();
+    return;
+  }
+  if (action === "joku-cashout") {
+    cashOutJoku();
+    return;
+  }
+  if (action === "joku-reset") {
+    resetJokuGame();
     return;
   }
   if (action === "yahtzee-roll") {
@@ -392,6 +569,10 @@ window.addEventListener("pointerup", (event) => {
       placeBlackjackBet(amount);
     } else if (state.currentScreen === "slots") {
       placeSlotBet(amount);
+    } else if (state.currentScreen === "baccarat") {
+      placeBaccaratBet(dropBetId, amount);
+    } else if (state.currentScreen === "bus") {
+      placeRideTheBusBet(amount);
     }
   } else {
     render();
@@ -413,11 +594,6 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "a") {
-    addFundsFromInput();
-    return;
-  }
-
   if (state.currentScreen === "menu") {
     if (key === "enter" || key === "r" || key === " ") {
       event.preventDefault();
@@ -428,6 +604,7 @@ window.addEventListener("keydown", (event) => {
     }
     if (key === "j") {
       event.preventDefault();
+      resetBlackjackForNewTable(true);
       state.currentScreen = "blackjack";
       scrollGameToTop();
       render();
@@ -438,17 +615,34 @@ window.addEventListener("keydown", (event) => {
       scrollGameToTop();
       render();
     }
+    if (key === "b") {
+      event.preventDefault();
+      resetBaccaratForNewTable(true);
+      state.currentScreen = "baccarat";
+      scrollGameToTop();
+      if (!state.baccarat.deck.length) initBaccarat();
+      render();
+    }
+    if (key === "v") {
+      event.preventDefault();
+      state.currentScreen = "bus";
+      scrollGameToTop();
+      if (!state.bus.deck.length) initRideTheBus();
+      render();
+    }
     if (key === "u") {
       event.preventDefault();
       state.currentScreen = "joku";
       scrollGameToTop();
+      if (!state.joku.grid.length) initJokuGrid();
       render();
     }
     return;
   }
 
-  if (key === "escape" || (key === "b" && state.currentScreen !== "slots")) {
+  if (key === "escape" || (key === "b" && !["slots", "baccarat", "bus"].includes(state.currentScreen))) {
     event.preventDefault();
+    resetCurrentTableForExit();
     state.currentScreen = "menu";
     scrollGameToTop();
     render();
@@ -477,7 +671,7 @@ window.addEventListener("keydown", (event) => {
       clearBlackjackBet();
       return;
     }
-    if (key >= "1" && key <= "5") {
+    if (key >= "1" && key <= "6") {
       const chipIndex = Number(key) - 1;
       placeBlackjackBet(CHIP_VALUES[chipIndex]);
       return;
@@ -503,7 +697,7 @@ window.addEventListener("keydown", (event) => {
       repeatSlotBet();
       return;
     }
-    if (key >= "1" && key <= "5") {
+    if (key >= "1" && key <= "6") {
       const chipIndex = Number(key) - 1;
       placeSlotBet(CHIP_VALUES[chipIndex]);
       return;
@@ -511,7 +705,109 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (state.currentScreen === "baccarat") {
+    if (key >= "1" && key <= "6") {
+      const chipIndex = Number(key) - 1;
+      state.selectedAmount = CHIP_VALUES[chipIndex];
+      render();
+      return;
+    }
+    if (key === "q" || key === "w" || key === "e") {
+      event.preventDefault();
+      state.baccarat.selectedBet = key === "q" ? "player" : key === "w" ? "dealer" : "tie";
+      state.baccarat.message = `${state.baccarat.selectedBet[0].toUpperCase() + state.baccarat.selectedBet.slice(1)} selected.`;
+      render();
+      return;
+    }
+    if (key === "b") {
+      event.preventDefault();
+      placeBaccaratBet(state.baccarat.selectedBet, state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      dealBaccaratRound();
+      return;
+    }
+    if (key === "c") {
+      clearBaccaratBets();
+      return;
+    }
+    if (key === "r") {
+      repeatBaccaratBets();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "bus") {
+    if (key >= "1" && key <= "6") {
+      const chipIndex = Number(key) - 1;
+      state.selectedAmount = CHIP_VALUES[chipIndex];
+      render();
+      return;
+    }
+    if (state.bus.phase === "guessing") {
+      const step = RIDE_BUS_STEPS[state.bus.step];
+      if (step && step.id === "red-black" && (key === "r" || key === "k")) {
+        answerRideTheBusGuess(key === "r" ? "red" : "black");
+        return;
+      }
+      if (step && step.id === "higher-lower" && (key === "h" || key === "l")) {
+        answerRideTheBusGuess(key === "h" ? "higher" : "lower");
+        return;
+      }
+      if (step && step.id === "inside-outside" && (key === "i" || key === "o")) {
+        answerRideTheBusGuess(key === "i" ? "inside" : "outside");
+        return;
+      }
+      if (step && step.id === "suit") {
+        const suitMap = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
+        if (suitMap[key]) {
+          answerRideTheBusGuess(suitMap[key]);
+          return;
+        }
+      }
+    }
+    if (key === "b") {
+      event.preventDefault();
+      placeRideTheBusBet(state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      startRideTheBus();
+      return;
+    }
+    if (key === "c") {
+      if (state.bus.phase === "guessing" && state.bus.step > 0) cashOutRideTheBus();
+      else clearRideTheBusBet();
+      return;
+    }
+    return;
+  }
+
   if (state.currentScreen === "joku") {
+    if (key === "c") {
+      event.preventDefault();
+      cashOutJoku();
+      return;
+    }
+    if (key === "n") {
+      event.preventDefault();
+      resetJokuGame();
+      return;
+    }
+    if (key === "arrowright" || key === "arrowdown") {
+      event.preventDefault();
+      toggleJokuCard(Math.min(state.joku.selectedIndices.length, JOKU_HAND_SIZE - 1));
+      return;
+    }
+    if (key >= "1" && key <= "5") {
+      event.preventDefault();
+      toggleJokuCard(Number(key) - 1);
+      return;
+    }
     if (key === "enter" || key === " ") {
       event.preventDefault();
       playJokuHand();
@@ -545,7 +841,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key >= "1" && key <= "5") {
+  if (key >= "1" && key <= "6") {
     const chipIndex = Number(key) - 1;
     state.selectedAmount = CHIP_VALUES[chipIndex];
     render();
@@ -817,20 +1113,53 @@ function scrollGameToTop() {
 
 function renderAuthPanel() {
   const signedIn = Boolean(authState.account);
-  const isKreeper = signedIn && authState.account.username === "kreeper2011";
 
   authForm.classList.toggle("hidden", signedIn);
   accountCard.classList.toggle("hidden", !signedIn);
 
-  if (addFundsButton) addFundsButton.classList.toggle("hidden", !isKreeper);
-  if (fundsInput && fundsInput.parentElement) fundsInput.parentElement.classList.toggle("hidden", !isKreeper);
-
-  addFundsButton.disabled = authState.loadingWallet;
-  fundsInput.disabled = authState.loadingWallet;
-
   if (signedIn) {
     accountName.textContent = authState.account.username;
+    accountVisibility.textContent = authState.account.isPublic ? "Public profile" : "Private profile";
   }
+}
+
+async function refreshLeaderboards(force = false) {
+  if (!hasSupabase()) {
+    leaderboardState.entries = [];
+    leaderboardState.loading = false;
+    leaderboardState.loaded = false;
+    leaderboardState.error = "Add Supabase config to turn on leaderboards.";
+    if (state.currentScreen === "menu" || menuState.settingsOpen) render();
+    return;
+  }
+
+  if (leaderboardState.loading) return;
+  if (leaderboardState.loaded && !force) return;
+
+  leaderboardState.loading = true;
+  leaderboardState.error = "";
+  if (state.currentScreen === "menu") render();
+
+  const { data, error } = await supabaseClient.rpc("get_public_leaderboards");
+  leaderboardState.loading = false;
+
+  if (error) {
+    leaderboardState.entries = [];
+    leaderboardState.loaded = false;
+    leaderboardState.error = error.message;
+    if (state.currentScreen === "menu" || menuState.settingsOpen) render();
+    return;
+  }
+
+  leaderboardState.entries = Array.isArray(data)
+    ? data.map((entry) => ({
+      username: entry.username,
+      balance: Number(entry.balance) || 0,
+      xp: Number(entry.xp) || 0,
+    }))
+    : [];
+  leaderboardState.loaded = true;
+  if (state.currentScreen === "menu" || menuState.settingsOpen) render();
 }
 
 async function signUpWithUsername() {
@@ -884,10 +1213,12 @@ async function signOut() {
   await flushWalletSave();
   authState.account = null;
   authState.walletLoaded = false;
+  menuState.settingsOpen = false;
   lastSavedWallet = null;
   lastSavedXp = null;
   authPassword.value = "";
   setAuthMessage("Logged out. Wallet changes are local only.");
+  refreshLeaderboards(true);
   render();
 }
 
@@ -928,12 +1259,14 @@ function normalizeUsername(value) {
 async function initializeAuth() {
   if (!hasSupabase()) {
     setAuthMessage("Supabase config needed before accounts can save.");
+    leaderboardState.error = "Add Supabase config to turn on leaderboards.";
     renderAuthPanel();
     return;
   }
 
   setAuthMessage("Log in or sign up to sync your wallet.");
   renderAuthPanel();
+  refreshLeaderboards(true);
 }
 
 function handleAccount(account, password, message) {
@@ -946,7 +1279,9 @@ function handleAccount(account, password, message) {
     id: account.account_id,
     username: account.username,
     password,
+    isPublic: account.is_public !== false,
   };
+  authUsername.value = account.username;
   authPassword.value = "";
   setWallet(Number(account.balance) || 0, false);
   setXp(Number(account.xp) || 0, false);
@@ -955,6 +1290,7 @@ function handleAccount(account, password, message) {
   authState.walletLoaded = true;
   authState.loadingWallet = false;
   setAuthMessage(message);
+  refreshLeaderboards(true);
   render();
 }
 
@@ -998,6 +1334,98 @@ async function saveWallet() {
   setAuthMessage("Wallet synced.");
 }
 
+async function updateAccountSettings() {
+  if (!authState.account || !hasSupabase()) {
+    setAuthMessage("Log in to manage settings.");
+    return;
+  }
+
+  const usernameInput = document.getElementById("settings-username");
+  const passwordInput = document.getElementById("settings-password");
+  const publicInput = document.getElementById("settings-public-toggle");
+  if (!usernameInput || !passwordInput || !publicInput) return;
+
+  const nextUsername = normalizeUsername(usernameInput.value.trim());
+  const nextPassword = passwordInput.value;
+  const nextIsPublic = Boolean(publicInput.checked);
+
+  if (!nextUsername) {
+    setAuthMessage("Enter a username.");
+    return;
+  }
+
+  if (nextUsername.length < 3) {
+    setAuthMessage("Username must be at least 3 characters.");
+    return;
+  }
+
+  if (nextPassword && nextPassword.length < 6) {
+    setAuthMessage("Password must be at least 6 characters.");
+    return;
+  }
+
+  const usernameChanged = nextUsername !== authState.account.username;
+  const passwordChanged = Boolean(nextPassword);
+  const visibilityChanged = nextIsPublic !== authState.account.isPublic;
+
+  if (!usernameChanged && !passwordChanged && !visibilityChanged) {
+    setAuthMessage("Nothing changed.");
+    return;
+  }
+
+  await flushWalletSave();
+  setAuthMessage("Saving settings...");
+  const { data, error } = await supabaseClient.rpc("update_player_settings", {
+    p_username: authState.account.username,
+    p_password: authState.account.password,
+    p_new_username: usernameChanged ? nextUsername : null,
+    p_new_password: passwordChanged ? nextPassword : null,
+    p_is_public: visibilityChanged ? nextIsPublic : null,
+  });
+
+  if (error) {
+    setAuthMessage(error.message);
+    return;
+  }
+
+  menuState.settingsOpen = false;
+  handleAccount(data && data[0], passwordChanged ? nextPassword : authState.account.password, "Settings saved.");
+}
+
+async function deleteAccount() {
+  if (!authState.account || !hasSupabase()) {
+    setAuthMessage("Log in to delete an account.");
+    return;
+  }
+
+  if (!window.confirm(`Delete ${authState.account.username}? This cannot be undone.`)) return;
+
+  await flushWalletSave();
+  setAuthMessage("Deleting account...");
+  const { error } = await supabaseClient.rpc("delete_player_account", {
+    p_username: authState.account.username,
+    p_password: authState.account.password,
+  });
+
+  if (error) {
+    setAuthMessage(error.message);
+    return;
+  }
+
+  authState.account = null;
+  authState.walletLoaded = false;
+  menuState.settingsOpen = false;
+  authUsername.value = "";
+  authPassword.value = "";
+  setWallet(0, false);
+  setXp(0, false);
+  lastSavedWallet = null;
+  lastSavedXp = null;
+  setAuthMessage("Account deleted.");
+  refreshLeaderboards(true);
+  render();
+}
+
 function getBetDefinition(id) {
   return betDefinitions.find((bet) => bet.id === id);
 }
@@ -1006,24 +1434,6 @@ function getBetTotal(id) {
   return state.bets
     .filter((bet) => bet.betId === id)
     .reduce((sum, bet) => sum + bet.amount, 0);
-}
-
-function addFundsFromInput() {
-  const isKreeper = authState.account && authState.account.username === "kreeper2011";
-  if (!isKreeper) return;
-
-  const amount = sanitizeMoney(fundsInput.value);
-  if (amount <= 0) {
-    state.spinMessage = "Enter a valid amount.";
-    render();
-    return;
-  }
-
-  adjustWallet(amount);
-  state.spinMessage = `Wallet +$${formatMoney(amount)}`;
-  state.popup = null;
-  state.pendingReveal = null;
-  render();
 }
 
 function clearPendingPopupTimer() {
@@ -1058,6 +1468,26 @@ function openPopupWithDelay(popup, delay = 900) {
     pendingPopupTimer = null;
     render();
   }, delay);
+}
+
+function resetCurrentTableForExit() {
+  if (state.currentScreen === "blackjack") {
+    resetBlackjackForNewTable(true);
+  } else if (state.currentScreen === "baccarat") {
+    resetBaccaratForNewTable(true);
+  } else if (state.currentScreen === "yahtzee") {
+    resetYahtzeeForNewGame();
+  }
+}
+
+function resetCurrentTableAfterPopup() {
+  if (state.currentScreen === "blackjack" && state.blackjack.result) {
+    resetBlackjackForNewTable(false);
+  } else if (state.currentScreen === "baccarat" && state.baccarat.result) {
+    resetBaccaratForNewTable(false);
+  } else if (state.currentScreen === "yahtzee" && isYahtzeeGameOver()) {
+    resetYahtzeeForNewGame();
+  }
 }
 
 function moveSelection(offset) {
@@ -1264,6 +1694,7 @@ function findBetZoneAtPoint(x, y) {
 }
 
 function chipClassForValue(value) {
+  if (value >= 500) return "500";
   if (value >= 100) return "100";
   if (value >= 25) return "25";
   if (value >= 10) return "10";
@@ -1278,19 +1709,129 @@ function render() {
   playerXp.textContent = `${progress.progressXp} / ${progress.neededXp} XP`;
   xpFill.style.width = `${progress.percent}%`;
   renderAuthPanel();
+  let screenHtml = "";
   if (state.currentScreen === "menu") {
-    appView.innerHTML = renderMenu();
+    screenHtml = renderMenu();
   } else if (state.currentScreen === "roulette") {
-    appView.innerHTML = renderRoulette();
+    screenHtml = renderRoulette();
   } else if (state.currentScreen === "blackjack") {
-    appView.innerHTML = renderBlackjack();
+    screenHtml = renderBlackjack();
   } else if (state.currentScreen === "slots") {
-    appView.innerHTML = renderSlots();
+    screenHtml = renderSlots();
+  } else if (state.currentScreen === "baccarat") {
+    screenHtml = renderBaccarat();
+  } else if (state.currentScreen === "bus") {
+    screenHtml = renderRideTheBus();
   } else if (state.currentScreen === "yahtzee") {
-    appView.innerHTML = renderYahtzee();
+    screenHtml = renderYahtzee();
   } else {
-    appView.innerHTML = renderJoku();
+    screenHtml = renderJoku();
   }
+  appView.innerHTML = `${screenHtml}${renderSettingsOverlay()}`;
+}
+
+function renderMenuLeaderboards() {
+  return `
+    <div class="leaderboard-stack">
+      ${renderLeaderboardCard("balance", "Balance", "Highest stacks on the floor.", "$")}
+      ${renderLeaderboardCard("xp", "XP", "Most experienced players.", "xp")}
+    </div>
+  `;
+}
+
+function renderLeaderboardCard(board, title, description, type) {
+  const expanded = board === "balance" ? menuState.showAllBalance : menuState.showAllXp;
+  const sortedEntries = [...leaderboardState.entries].sort((a, b) => (
+    type === "$"
+      ? b.balance - a.balance || b.xp - a.xp || a.username.localeCompare(b.username)
+      : b.xp - a.xp || b.balance - a.balance || a.username.localeCompare(b.username)
+  ));
+  const visibleEntries = expanded ? sortedEntries : sortedEntries.slice(0, LEADERBOARD_PREVIEW_COUNT);
+  const hasMore = sortedEntries.length > LEADERBOARD_PREVIEW_COUNT;
+
+  let body = "";
+  if (!hasSupabase()) {
+    body = `<p class="leaderboard-empty">${escapeHtml(leaderboardState.error || "Add Supabase config to turn on leaderboards.")}</p>`;
+  } else if (leaderboardState.loading && !leaderboardState.loaded) {
+    body = `<p class="leaderboard-empty">Loading leaderboard...</p>`;
+  } else if (leaderboardState.error) {
+    body = `<p class="leaderboard-empty">${escapeHtml(leaderboardState.error)}</p>`;
+  } else if (!visibleEntries.length) {
+    body = `<p class="leaderboard-empty">No public players yet.</p>`;
+  } else {
+    body = `
+      <div class="leaderboard-list">
+        ${visibleEntries.map((entry, index) => renderLeaderboardEntry(entry, sortedEntries.indexOf(entry) + 1, type)).join("")}
+      </div>
+    `;
+  }
+
+  return `
+    <section class="leaderboard-card">
+      <div class="leaderboard-card-head">
+        <div>
+          <p class="menu-eyebrow">${escapeHtml(title)}</p>
+          <h3>${escapeHtml(title)} Leaderboard</h3>
+        </div>
+        <p class="leaderboard-description">${escapeHtml(description)}</p>
+      </div>
+      ${body}
+      ${hasMore ? `<button class="pill-button leaderboard-more" data-action="toggle-leaderboard" data-board="${board}">${expanded ? "Show top 3" : "See more"}</button>` : ""}
+    </section>
+  `;
+}
+
+function renderLeaderboardEntry(entry, rank, type) {
+  const youBadge = authState.account && authState.account.username === entry.username
+    ? `<span class="leaderboard-you">You</span>`
+    : "";
+  const value = type === "$" ? `$${formatMoney(entry.balance)}` : `${entry.xp} XP`;
+  return `
+    <div class="leaderboard-entry">
+      <div class="leaderboard-rank">#${rank}</div>
+      <div class="leaderboard-player">
+        <strong>${escapeHtml(entry.username)}</strong>
+        ${youBadge}
+      </div>
+      <div class="leaderboard-value">${escapeHtml(value)}</div>
+    </div>
+  `;
+}
+
+function renderSettingsOverlay() {
+  if (!menuState.settingsOpen || !authState.account) return "";
+
+  return `
+    <div class="settings-modal-shell">
+      <button class="settings-backdrop" data-action="close-settings" aria-label="Close settings"></button>
+      <section class="settings-modal surface">
+        <div class="settings-head">
+          <div>
+            <p class="menu-eyebrow">Settings</p>
+            <h2>Account settings</h2>
+          </div>
+          <button class="pill-button" data-action="close-settings">Close</button>
+        </div>
+        <p class="settings-copy">Update your username, change your password, delete the account, or decide whether your profile appears on the leaderboards.</p>
+        <label class="settings-field">
+          <span>Username</span>
+          <input id="settings-username" type="text" value="${escapeAttribute(authState.account.username)}" maxlength="20">
+        </label>
+        <label class="settings-field">
+          <span>New password</span>
+          <input id="settings-password" type="password" placeholder="Leave blank to keep the current one.">
+        </label>
+        <label class="settings-toggle">
+          <input id="settings-public-toggle" type="checkbox" ${authState.account.isPublic ? "checked" : ""}>
+          <span>Show this account on the public leaderboards</span>
+        </label>
+        <div class="settings-actions">
+          <button class="action-button accent" data-action="save-settings">Save settings</button>
+          <button class="action-button danger" data-action="delete-account">Delete account</button>
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function renderMenu() {
@@ -1302,7 +1843,7 @@ function renderMenu() {
           <h2>Pick your table and bring your stack with you.</h2>
         </div>
         <p class="menu-copy">
-          Your wallet carries across the room. Load test funds up top, then jump into roulette and drag chips straight onto the table.
+          Your wallet carries across the room. Pick a table, drag chips from the tray, and play from the same balance.
         </p>
         <div class="game-grid">
           <button class="game-card" data-action="open-roulette">
@@ -1335,6 +1876,31 @@ function renderMenu() {
               <p>Three rows, five reels, eleven patterns, and a paced spin that sits between feast and famine.</p>
             </div>
           </button>
+          <button class="game-card" data-action="open-baccarat">
+            <div class="baccarat-menu-art">
+              <div class="baccarat-menu-arc">P</div>
+              <div class="baccarat-menu-arc">D</div>
+              <div class="baccarat-menu-arc">T</div>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Baccarat</h3>
+              <p>Only player, dealer, and tie. Stack chips, deal the shoes, and ride the hand totals.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-bus">
+            <div class="bus-menu-art">
+              <div class="bus-menu-card">R</div>
+              <div class="bus-menu-card">H</div>
+              <div class="bus-menu-card">I</div>
+              <div class="bus-menu-card">S</div>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Ride the Bus</h3>
+              <p>Guess a run of cards step by step, then try to keep the bus rolling through the whole shoe.</p>
+            </div>
+          </button>
           <button class="game-card" data-action="open-joku">
             <div class="joku-menu-art">
               ${["J", "O", "K", "U"].map((rank, index) => renderMenuCard(rank, index)).join("")}
@@ -1342,7 +1908,7 @@ function renderMenu() {
             <div class="game-card-copy">
               <p class="game-tag">Free play</p>
               <h3>JØKU</h3>
-              <p>Find combinations of 5 cards on a 5x5 grid to earn rewards and build your stack.</p>
+              <p>Find combinations of 5 cards on a 5x5 grid to earn points, then cash out when the deck runs dry or the board stalls.</p>
             </div>
           </button>
           <button class="game-card" data-action="open-yahtzee">
@@ -1363,22 +1929,17 @@ function renderMenu() {
       <aside class="side-panel surface">
         <div>
           <p class="menu-eyebrow">Casino</p>
-          <h2>Two tables, one wallet</h2>
-          <p class="menu-copy">Top up the wallet in the header, bounce between the tables, or build your stack for free in JØKU and Yahtzee.</p>
+          <h2>Leaderboards</h2>
+          <p class="menu-copy">Public profiles show up here. The lists refresh when players come back to the menu.</p>
         </div>
-        <div class="menu-stats">
-          <div class="menu-stat">
-            <p class="game-tag">Wallet</p>
-            <strong>$${formatMoney(state.wallet)}</strong>
+        ${renderMenuLeaderboards()}
+        <div class="menu-settings-card">
+          <div>
+            <p class="game-tag">Account</p>
+            <strong>${authState.account ? "Settings ready" : "Sign in first"}</strong>
           </div>
-          <div class="menu-stat">
-            <p class="game-tag">Tables</p>
-            <strong>5</strong>
-          </div>
-          <div class="menu-stat">
-            <p class="game-tag">Level</p>
-            <strong>${getLevelProgress(state.xp).level}</strong>
-          </div>
+          <p class="menu-note">${authState.account ? "Change your username or password, delete the account, or hide from the leaderboards." : "Log in or sign up to save progress and manage visibility."}</p>
+          ${authState.account ? '<button class="action-button accent" data-action="open-settings">Open settings</button>' : ""}
         </div>
         <div class="menu-note">${escapeHtml(currentMenuNote())}</div>
       </aside>
@@ -1400,8 +1961,9 @@ function renderRoulette() {
       <div class="table-frame">
         <div class="table-asset" style="aspect-ratio:${TABLE_ASPECT}">
           <img class="table-image" src="roulette table.png" alt="Roulette table">
-          <div class="roulette-wheel-window ${state.rouletteSpinActive ? "spinning" : ""}">
-            <div class="roulette-ball-orbit">
+          <div class="roulette-wheel-window">
+            <img class="roulette-wheel-disk ${state.rouletteSpinActive ? "spinning" : ""}" src="roulette spin.png" alt="">
+            <div class="roulette-ball-orbit ${state.rouletteSpinActive ? "spinning" : ""}">
               <div class="roulette-ball"></div>
             </div>
           </div>
@@ -1577,7 +2139,7 @@ function renderSlots() {
 function renderJoku() {
   const joku = state.joku;
   return `
-    <section class="joku-screen surface">
+    <section class="joku-screen surface ${escapeAttribute(joku.phase)}">
       <div class="roulette-head">
         <button class="pill-button menu-button" data-action="go-menu">Menu</button>
         ${renderJokuResult()}
@@ -1625,12 +2187,14 @@ function renderJokuCard(card, index) {
   const joku = state.joku;
   const selected = joku.selectedIndices.includes(index);
   const isNew = joku.newIndices.includes(index);
+  const isFreshCard = joku.newCardIndices.includes(index);
+  const fallDistance = joku.fallDistances[index] || 1;
   const { row, col } = cardSpritePosition(card);
 
   return `
-    <button class="playing-card joku-grid-card ${selected ? "selected" : ""} ${isNew ? "falling" : ""}" 
+    <button class="playing-card joku-grid-card ${selected ? "selected" : ""} ${isNew ? "falling" : ""} ${isFreshCard ? "fresh" : ""}" 
             data-action="joku-select" data-index="${index}" aria-label="${card.rank} of ${card.suit}"
-            style="--col-delay: ${index % 5}">
+            style="--col-delay: ${index % 5}; --fall-rows: ${fallDistance}">
       <div class="card-face" style="background-position:${col * -72}px ${row * -98}px"></div>
     </button>
   `;
@@ -1773,14 +2337,14 @@ function renderMenuCard(rank, index) {
   `;
 }
 
-function renderCard(card) {
+function renderCard(card, revealed = false) {
   if (!card || card.hidden) {
     return `<div class="playing-card card-back"><div class="card-back-inner"></div></div>`;
   }
 
   const { row, col } = cardSpritePosition(card);
   return `
-    <div class="playing-card">
+    <div class="playing-card ${revealed ? "revealed" : ""}">
       <div class="card-face" style="background-position:${col * -72}px ${row * -98}px"></div>
     </div>
   `;
@@ -1788,6 +2352,8 @@ function renderCard(card) {
 
 function currentMenuNote() {
   if (state.yahtzee.message !== "Roll the dice to start!" && state.yahtzee.message !== "Turn complete. Roll to start next turn.") return state.yahtzee.message;
+  if (state.baccarat.result) return state.baccarat.result.detail;
+  if (state.bus.result) return state.bus.result.detail;
   if (state.joku.result) return state.joku.message;
   if (state.blackjack.result) return state.blackjack.result.detail;
   if (state.slot.result) return state.slot.message;
@@ -1876,6 +2442,8 @@ function initJokuGrid() {
   joku.grid = Array.from({ length: 25 }, () => joku.deck.pop());
   joku.selectedIndices = [];
   joku.newIndices = [];
+  joku.newCardIndices = [];
+  joku.fallDistances = {};
   joku.result = null;
   joku.phase = "ready";
   joku.message = "Select 5 linked cards.";
@@ -1895,6 +2463,8 @@ function toggleJokuCard(index) {
       const isPickable = joku.selectedIndices.some((idx) => isJokuAdjacent(idx, index));
       if (isPickable) {
         joku.newIndices = []; // clear old animations
+        joku.newCardIndices = [];
+        joku.fallDistances = {};
         joku.selectedIndices.push(index);
       }
     }
@@ -1922,25 +2492,39 @@ function playJokuHand() {
   joku.result = result;
   joku.message = `${result.rank}. +$${formatMoney(result.reward)}`;
 
-  joku.phase = "refilling";
+  joku.phase = "removing";
   joku.newIndices = [...joku.selectedIndices]; // pulse animations for those going away
+  joku.newCardIndices = [];
+  joku.fallDistances = {};
   render();
 
-  setTimeout(() => {
-    refillJokuGrid();
-    joku.phase = "ready";
+  scheduleUiTask(() => {
+    const animation = refillJokuGrid();
+    joku.phase = "settling";
     joku.selectedIndices = [];
+    joku.newIndices = animation.changedIndices;
+    joku.newCardIndices = animation.newCardIndices;
+    joku.fallDistances = animation.fallDistances;
+
     render();
 
-    if (result.reward > 0) {
-      openPopupWithDelay({
-        tone: "win",
-        title: result.rank,
-        detail: `Collected $${formatMoney(result.reward)} Reward.`,
-        buttonLabel: "Keep Playing",
-      }, 300);
-    }
-  }, 600);
+    scheduleUiTask(() => {
+      joku.phase = "ready";
+      joku.newIndices = [];
+      joku.newCardIndices = [];
+      joku.fallDistances = {};
+      render();
+
+      if (result.reward > 0) {
+        openPopupWithDelay({
+          tone: "win",
+          title: result.rank,
+          detail: `Collected $${formatMoney(result.reward)} Reward.`,
+          buttonLabel: "Keep Playing",
+        }, 120);
+      }
+    }, 420);
+  }, 440);
 }
 
 function refillJokuGrid() {
@@ -1948,14 +2532,19 @@ function refillJokuGrid() {
   const removedSet = new Set(joku.selectedIndices);
   const columns = 5;
   const rows = 5;
-  joku.newIndices = [];
+  const changedIndices = [];
+  const newCardIndices = [];
+  const fallDistances = {};
 
   for (let col = 0; col < columns; col += 1) {
     const columnStaying = [];
     for (let row = rows - 1; row >= 0; row -= 1) {
       const idx = row * columns + col;
       if (!removedSet.has(idx)) {
-        columnStaying.push(joku.grid[idx]);
+        columnStaying.push({
+          card: joku.grid[idx],
+          oldRow: row,
+        });
       }
     }
 
@@ -1963,19 +2552,31 @@ function refillJokuGrid() {
     const newCards = [];
     for (let i = 0; i < cardsNeeded; i++) {
       if (joku.deck.length < 1) joku.deck = createDeck(true);
-      newCards.push(joku.deck.pop());
+      newCards.push({
+        card: joku.deck.pop(),
+        oldRow: -cardsNeeded + i,
+      });
     }
 
     const newColumn = [...newCards.reverse(), ...columnStaying.reverse()];
 
     for (let row = 0; row < rows; row += 1) {
       const idx = row * columns + col;
-      joku.grid[idx] = newColumn[row];
-      if (row < cardsNeeded) {
-        joku.newIndices.push(idx);
+      const entry = newColumn[row];
+      joku.grid[idx] = entry.card;
+
+      const rowDrop = row - entry.oldRow;
+      if (rowDrop > 0) {
+        changedIndices.push(idx);
+        fallDistances[idx] = rowDrop;
+        if (entry.oldRow < 0) {
+          newCardIndices.push(idx);
+        }
       }
     }
   }
+
+  return { changedIndices, newCardIndices, fallDistances };
 }
 
 
@@ -2124,6 +2725,23 @@ function resetBlackjackTable() {
   bj.player = [];
   bj.dealerReveal = false;
   bj.result = null;
+}
+
+function resetBlackjackForNewTable(refundWager = false) {
+  const bj = state.blackjack;
+  if (refundWager && bj.wager > 0 && bj.phase === "betting") {
+    adjustWallet(bj.wager);
+  }
+  bj.phase = "betting";
+  bj.dealer = [];
+  bj.player = [];
+  bj.dealerReveal = false;
+  bj.result = null;
+  bj.wager = 0;
+  bj.wagerChips = [];
+  bj.message = "Place chips, then deal.";
+  state.pendingReveal = null;
+  state.popup = null;
 }
 
 function placeBlackjackBet(amount) {
@@ -2631,6 +3249,15 @@ window.render_game_to_text = () => JSON.stringify({
   wallet: state.wallet,
   xp: state.xp,
   level: getLevelProgress(state.xp).level,
+  account: authState.account ? {
+    username: authState.account.username,
+    isPublic: authState.account.isPublic,
+  } : null,
+  leaderboards: {
+    loaded: leaderboardState.loaded,
+    loading: leaderboardState.loading,
+    count: leaderboardState.entries.length,
+  },
   selectedAmount: state.selectedAmount,
   selectedBetId: state.selectedBetId,
   hoverBetId: state.hoverBetId,
@@ -2644,6 +3271,16 @@ window.render_game_to_text = () => JSON.stringify({
     result: state.blackjack.result,
     message: state.blackjack.message,
   },
+  baccarat: {
+    phase: state.baccarat.phase,
+    playerHand: state.baccarat.playerHand,
+    dealerHand: state.baccarat.dealerHand,
+    revealedPlayerCards: state.baccarat.revealedPlayerCards,
+    revealedDealerCards: state.baccarat.revealedDealerCards,
+    bets: state.baccarat.bets,
+    result: state.baccarat.result,
+    message: state.baccarat.message,
+  },
   slots: {
     phase: state.slot.phase,
     wager: state.slot.wager,
@@ -2656,9 +3293,25 @@ window.render_game_to_text = () => JSON.stringify({
     phase: state.joku.phase,
     grid: state.joku.grid,
     selectedIndices: state.joku.selectedIndices,
+    newIndices: state.joku.newIndices,
+    newCardIndices: state.joku.newCardIndices,
+    fallDistances: state.joku.fallDistances,
     result: state.joku.result,
     message: state.joku.message,
+    score: state.joku.score,
+    cashOut: state.joku.cashOut,
+    comboCount: state.joku.comboCount,
+    cardsRemaining: state.joku.cardsRemaining,
+    endReason: state.joku.endReason,
     canLoseMoney: false,
+  },
+  bus: {
+    phase: state.bus.phase,
+    wager: state.bus.wager,
+    cards: state.bus.cards,
+    step: state.bus.step,
+    result: state.bus.result,
+    message: state.bus.message,
   },
   yahtzee: {
     phase: state.yahtzee.phase,
@@ -2672,7 +3325,7 @@ window.render_game_to_text = () => JSON.stringify({
   },
   message: state.spinMessage,
   dragActive: dragState.active,
-  availableGames: ["roulette", "blackjack", "slots", "joku"],
+  availableGames: ["roulette", "blackjack", "slots", "baccarat", "bus", "joku", "yahtzee"],
 });
 
 window.advanceTime = (ms = 0) => {
@@ -2921,4 +3574,1300 @@ function renderScorecardRow(label, key) {
       <td class="score-cell">${isFilled ? y.scores[key] : `<span class="potential">${currentPotential}</span>`}</td>
     </tr>
   `;
+}
+
+function createJokuDeck() {
+  return createDeck().slice(0, JOKU_TOTAL_CARDS);
+}
+
+function initBaccarat() {
+  state.baccarat = {
+    phase: "betting",
+    deck: createDeck(),
+    playerHand: [],
+    dealerHand: [],
+    revealedPlayerCards: 0,
+    revealedDealerCards: 0,
+    lastRevealedSide: null,
+    lastRevealedIndex: -1,
+    bets: { player: 0, dealer: 0, tie: 0 },
+    betChips: { player: [], dealer: [], tie: [] },
+    lastBets: { player: 0, dealer: 0, tie: 0 },
+    lastBetChips: { player: [], dealer: [], tie: [] },
+    selectedBet: "player",
+    result: null,
+    message: "Pick player, dealer, or tie.",
+  };
+}
+
+function initRideTheBus() {
+  state.bus = {
+    phase: "betting",
+    deck: createDeck(),
+    wager: 0,
+    wagerChips: [],
+    step: 0,
+    cards: [],
+    result: null,
+    message: "Place a wager and ride the bus.",
+  };
+}
+
+function initJokuGrid() {
+  const joku = state.joku;
+  joku.deck = createJokuDeck();
+  joku.grid = Array.from({ length: JOKU_GRID_SIZE }, () => joku.deck.pop() || null);
+  joku.selectedIndices = [];
+  joku.newIndices = [];
+  joku.newCardIndices = [];
+  joku.fallDistances = {};
+  joku.result = null;
+  joku.score = 0;
+  joku.cashOut = 0;
+  joku.comboCount = 0;
+  joku.cardsRemaining = joku.deck.length;
+  joku.endReason = null;
+  joku.phase = "ready";
+  joku.message = "Select 5 linked cards.";
+}
+
+function toggleJokuCard(index) {
+  const joku = state.joku;
+  if (joku.phase !== "ready") return;
+  if (!joku.grid[index]) return;
+
+  const pos = joku.selectedIndices.indexOf(index);
+  if (pos !== -1) {
+    if (!canDeselectJokuCard(index)) {
+      joku.message = "That card keeps the chain connected.";
+      render();
+      return;
+    }
+    joku.selectedIndices.splice(pos, 1);
+    joku.message = "Select 5 linked cards.";
+    render();
+    return;
+  }
+
+  if (joku.selectedIndices.length === 0) {
+    joku.selectedIndices.push(index);
+    render();
+    return;
+  }
+
+  const isPickable = joku.selectedIndices.some((idx) => isJokuAdjacent(idx, index));
+  if (isPickable && joku.selectedIndices.length < JOKU_HAND_SIZE) {
+    joku.selectedIndices.push(index);
+    render();
+  }
+}
+
+function isJokuAdjacent(idx1, idx2) {
+  const r1 = Math.floor(idx1 / 5);
+  const c1 = idx1 % 5;
+  const r2 = Math.floor(idx2 / 5);
+  const c2 = idx2 % 5;
+  return Math.abs(r1 - r2) <= 1 && Math.abs(c1 - c2) <= 1;
+}
+
+function canPlayJoku() {
+  const joku = state.joku;
+  return joku.phase === "ready" && joku.selectedIndices.length === JOKU_HAND_SIZE;
+}
+
+function canCashOutJoku() {
+  const joku = state.joku;
+  return joku.phase === "finished" && joku.cashOut > 0;
+}
+
+function canResetJoku() {
+  const joku = state.joku;
+  return joku.phase !== "ready" || joku.score > 0 || joku.cardsRemaining !== JOKU_TOTAL_CARDS - JOKU_GRID_SIZE;
+}
+
+function playJokuHand() {
+  const joku = state.joku;
+  if (!canPlayJoku()) return;
+
+  const hand = joku.selectedIndices.map((idx) => joku.grid[idx]).filter(Boolean);
+  const result = evaluateJokuHand(hand);
+
+  joku.score += result.points;
+  joku.comboCount += 1;
+  joku.cashOut = Math.round(joku.score * JOKU_HAND_MULTIPLIER * 100) / 100;
+  joku.result = result;
+  joku.message = `${result.rank}. +${result.points} pts`;
+  joku.phase = "dropping";
+  joku.newIndices = [...joku.selectedIndices];
+  joku.newCardIndices = [];
+  joku.fallDistances = {};
+  render();
+
+  scheduleUiTask(() => {
+    const refill = refillJokuGrid();
+    joku.grid = refill.grid;
+    joku.cardsRemaining = joku.deck.length;
+    joku.selectedIndices = [];
+    joku.newIndices = refill.changedIndices;
+    joku.newCardIndices = refill.newCardIndices;
+    joku.fallDistances = refill.fallDistances;
+    joku.phase = "ready";
+
+    if (joku.cardsRemaining === 0 || !hasJokuMove()) {
+      joku.phase = "finished";
+      joku.endReason = joku.cardsRemaining === 0 ? "deck-empty" : "no-combos";
+      if (joku.endReason === "deck-empty") {
+        joku.newIndices = [];
+        joku.newCardIndices = [];
+        joku.fallDistances = {};
+      }
+      joku.message = joku.endReason === "deck-empty"
+        ? "No cards left. Cash out your score."
+        : "No more combinations. Cash out your score.";
+      joku.result = {
+        rank: "Game Over",
+        points: 0,
+        cashValue: joku.cashOut,
+      };
+    }
+
+    render();
+
+    if (joku.phase === "finished") {
+      openPopupWithDelay({
+        tone: "idle",
+        title: "JOKU Complete",
+        detail: `Cash out ${joku.score} points for $${formatMoney(joku.cashOut)}.`,
+        buttonLabel: "Cash Out",
+      }, 200);
+    }
+  }, 420);
+}
+
+function cashOutJoku() {
+  const joku = state.joku;
+  if (!canCashOutJoku()) return;
+  adjustWallet(joku.cashOut);
+  awardRoundXp("JOKU");
+  joku.message = `Cashed out $${formatMoney(joku.cashOut)}.`;
+  joku.result = {
+    rank: "Cashed Out",
+    points: joku.score,
+    cashValue: joku.cashOut,
+  };
+  render();
+  openPopupWithDelay({
+    tone: "win",
+    title: "Cashed Out",
+    detail: `You banked $${formatMoney(joku.cashOut)} from ${joku.score} points.`,
+    buttonLabel: "New Game",
+  }, 220);
+  joku.phase = "cashed-out";
+}
+
+function resetJokuGame() {
+  initJokuGrid();
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = null;
+  render();
+}
+
+function refillJokuGrid() {
+  const joku = state.joku;
+  const removedSet = new Set(joku.selectedIndices);
+  const columns = 5;
+  const rows = 5;
+  const nextGrid = [...joku.grid];
+  const changedIndices = [];
+  const newCardIndices = [];
+  const fallDistances = {};
+
+  for (let col = 0; col < columns; col += 1) {
+    const staying = [];
+    for (let row = rows - 1; row >= 0; row -= 1) {
+      const idx = row * columns + col;
+      const card = nextGrid[idx];
+      if (card && !removedSet.has(idx)) {
+        staying.push({ card, oldRow: row });
+      }
+    }
+
+    const cardsNeeded = rows - staying.length;
+    const newCards = [];
+    for (let i = 0; i < cardsNeeded && joku.deck.length > 0; i += 1) {
+      newCards.push({
+        card: joku.deck.pop(),
+        oldRow: -cardsNeeded + i,
+      });
+    }
+
+    const newColumn = [...newCards.reverse(), ...staying.reverse()];
+    for (let row = 0; row < rows; row += 1) {
+      const idx = row * columns + col;
+      const entry = newColumn[row];
+      nextGrid[idx] = entry ? entry.card : null;
+      if (entry) {
+        const rowDrop = row - entry.oldRow;
+        if (rowDrop > 0) {
+          changedIndices.push(idx);
+          fallDistances[idx] = rowDrop;
+          if (entry.oldRow < 0) {
+            newCardIndices.push(idx);
+          }
+        }
+      }
+    }
+  }
+
+  return { grid: nextGrid, changedIndices, newCardIndices, fallDistances };
+}
+
+function hasJokuMove() {
+  const joku = state.joku;
+  const occupied = joku.grid
+    .map((card, index) => (card ? index : null))
+    .filter((index) => index !== null);
+
+  const seen = new Set();
+  for (const start of occupied) {
+    if (searchJokuCombo([start], seen)) return true;
+  }
+  return false;
+}
+
+function searchJokuCombo(path, seen) {
+  const joku = state.joku;
+  const key = [...path].sort((a, b) => a - b).join("-");
+  if (seen.has(key)) return false;
+  seen.add(key);
+
+  if (path.length === JOKU_HAND_SIZE) {
+    const hand = path.map((index) => joku.grid[index]).filter(Boolean);
+    return evaluateJokuHand(hand).points > 0;
+  }
+
+  const neighbors = new Set();
+  for (const idx of path) {
+    const row = Math.floor(idx / 5);
+    const col = idx % 5;
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = row + dr;
+        const nc = col + dc;
+        if (nr < 0 || nr >= 5 || nc < 0 || nc >= 5) continue;
+        const next = nr * 5 + nc;
+        if (!path.includes(next) && joku.grid[next]) neighbors.add(next);
+      }
+    }
+  }
+
+  for (const next of neighbors) {
+    if (searchJokuCombo([...path, next], seen)) return true;
+  }
+
+  return false;
+}
+
+function evaluateJokuHand(hand) {
+  const rankOrder = { A: 14, K: 13, Q: 12, J: 11, "10": 10, "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2 };
+  const values = hand.map((card) => rankOrder[card.rank]).sort((a, b) => a - b);
+  const suits = hand.map((card) => card.suit);
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  const groups = [...counts.values()].sort((a, b) => b - a);
+  const flush = suits.every((suit) => suit === suits[0]);
+  const wheel = values.join(",") === "2,3,4,5,14";
+  const straight = wheel || values.every((value, index) => index === 0 || value === values[index - 1] + 1);
+  const royal = flush && values.join(",") === "10,11,12,13,14";
+
+  let rank = "High Card";
+  if (royal) rank = "Royal Flush";
+  else if (straight && flush) rank = "Straight Flush";
+  else if (groups[0] === 4) rank = "Four of a Kind";
+  else if (groups[0] === 3 && groups[1] === 2) rank = "Full House";
+  else if (flush) rank = "Flush";
+  else if (straight) rank = "Straight";
+  else if (groups[0] === 3) rank = "Three of a Kind";
+  else if (groups[0] === 2 && groups[1] === 2) rank = "Two Pair";
+  else if (groups[0] === 2) rank = "Pair";
+
+  const payout = JOKU_PAYOUTS.find((item) => item.rank === rank) || JOKU_PAYOUTS[JOKU_PAYOUTS.length - 1];
+  return {
+    rank,
+    points: payout.points,
+    reward: payout.reward,
+    cashValue: Math.round(payout.points * JOKU_HAND_MULTIPLIER * 100) / 100,
+  };
+}
+
+function baccaratCardValue(card) {
+  if (!card || card.hidden) return 0;
+  if (["10", "J", "Q", "K"].includes(card.rank)) return 0;
+  if (card.rank === "A") return 1;
+  return Number(card.rank);
+}
+
+function baccaratHandTotal(hand) {
+  return hand.reduce((sum, card) => (sum + baccaratCardValue(card)) % 10, 0);
+}
+
+function baccaratCardLabel(card) {
+  return card ? `${card.rank} ${card.suit}` : "--";
+}
+
+function canDealBaccarat() {
+  return state.baccarat.phase === "betting" && totalBaccaratBets() > 0;
+}
+
+function canRepeatBaccarat() {
+  const baccarat = state.baccarat;
+  return baccarat.phase === "betting" && totalBaccaratLastBets() > 0;
+}
+
+function totalBaccaratBets() {
+  const bets = state.baccarat.bets;
+  return bets.player + bets.dealer + bets.tie;
+}
+
+function totalBaccaratLastBets() {
+  const bets = state.baccarat.lastBets || { player: 0, dealer: 0, tie: 0 };
+  return bets.player + bets.dealer + bets.tie;
+}
+
+function normalizeBaccaratSide(side) {
+  return String(side || "").replace(/^baccarat-/, "");
+}
+
+function placeBaccaratBet(side, amount) {
+  const baccarat = state.baccarat;
+  const betSide = normalizeBaccaratSide(side);
+  if (baccarat.phase !== "betting") {
+    baccarat.message = "Wait for the hand to finish.";
+    render();
+    return;
+  }
+
+  if (!["player", "dealer", "tie"].includes(betSide)) return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (chip > state.wallet) {
+    baccarat.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+
+  prepareBaccaratNextBet();
+  adjustWallet(-chip);
+  baccarat.bets[betSide] += chip;
+  baccarat.betChips[betSide].push(chip);
+  baccarat.selectedBet = betSide;
+  baccarat.message = `${betSide[0].toUpperCase() + betSide.slice(1)} bet $${formatMoney(baccarat.bets[betSide])}`;
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function clearBaccaratBets() {
+  const baccarat = state.baccarat;
+  const total = totalBaccaratBets();
+  if (!total) return;
+  adjustWallet(total);
+  baccarat.lastBets = { ...baccarat.bets };
+  baccarat.lastBetChips = cloneBaccaratChips(baccarat.betChips);
+  baccarat.bets = { player: 0, dealer: 0, tie: 0 };
+  baccarat.betChips = emptyBaccaratChips();
+  baccarat.message = "Bets cleared.";
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function repeatBaccaratBets() {
+  const baccarat = state.baccarat;
+  if (baccarat.phase !== "betting" || !totalBaccaratLastBets()) return;
+  const lastTotal = totalBaccaratLastBets();
+  if (lastTotal > state.wallet) {
+    baccarat.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+
+  prepareBaccaratNextBet();
+  adjustWallet(-lastTotal);
+  baccarat.bets = { ...baccarat.lastBets };
+  baccarat.betChips = cloneBaccaratChips(baccarat.lastBetChips || chipsFromBaccaratBets(baccarat.lastBets));
+  baccarat.message = "Repeat bet ready.";
+  render();
+}
+
+function canDeselectJokuCard(index) {
+  const joku = state.joku;
+  const remaining = joku.selectedIndices.filter((idx) => idx !== index);
+  if (remaining.length <= 1) return true;
+
+  const visited = new Set([remaining[0]]);
+  const queue = [remaining[0]];
+  while (queue.length) {
+    const current = queue.shift();
+    for (const next of remaining) {
+      if (!visited.has(next) && isJokuAdjacent(current, next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return visited.size === remaining.length;
+}
+
+function prepareBaccaratNextBet() {
+  const baccarat = state.baccarat;
+  if (!baccarat.result) return;
+  baccarat.result = null;
+  baccarat.playerHand = [];
+  baccarat.dealerHand = [];
+  baccarat.revealedPlayerCards = 0;
+  baccarat.revealedDealerCards = 0;
+  baccarat.lastRevealedSide = null;
+  baccarat.lastRevealedIndex = -1;
+}
+
+function emptyBaccaratChips() {
+  return { player: [], dealer: [], tie: [] };
+}
+
+function cloneBaccaratChips(chips) {
+  return {
+    player: [...(chips && chips.player ? chips.player : [])],
+    dealer: [...(chips && chips.dealer ? chips.dealer : [])],
+    tie: [...(chips && chips.tie ? chips.tie : [])],
+  };
+}
+
+function resetYahtzeeForNewGame() {
+  initYahtzee();
+  state.pendingReveal = null;
+  state.popup = null;
+}
+
+function resetBaccaratForNewTable(refundBets = false) {
+  const baccarat = state.baccarat;
+  const activeTotal = totalBaccaratBets();
+  if (refundBets && activeTotal > 0 && baccarat.phase === "betting") {
+    adjustWallet(activeTotal);
+  }
+  baccarat.phase = "betting";
+  baccarat.playerHand = [];
+  baccarat.dealerHand = [];
+  baccarat.revealedPlayerCards = 0;
+  baccarat.revealedDealerCards = 0;
+  baccarat.lastRevealedSide = null;
+  baccarat.lastRevealedIndex = -1;
+  baccarat.bets = { player: 0, dealer: 0, tie: 0 };
+  baccarat.betChips = emptyBaccaratChips();
+  baccarat.result = null;
+  baccarat.message = "Pick player, dealer, or tie.";
+  state.pendingReveal = null;
+  state.popup = null;
+}
+
+function chipsFromBaccaratBets(bets) {
+  return {
+    player: buildChipListForAmount(bets.player || 0),
+    dealer: buildChipListForAmount(bets.dealer || 0),
+    tie: buildChipListForAmount(bets.tie || 0),
+  };
+}
+
+function dealBaccaratRound() {
+  const baccarat = state.baccarat;
+  if (!canDealBaccarat()) return;
+
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = {
+    game: "baccarat",
+    title: "Dealing",
+    detail: "Cards are coming off the shoe...",
+  };
+  baccarat.phase = "dealing";
+  baccarat.result = null;
+  baccarat.revealedPlayerCards = 0;
+  baccarat.revealedDealerCards = 0;
+  baccarat.lastRevealedSide = null;
+  baccarat.lastRevealedIndex = -1;
+  if (baccarat.deck.length < 6) baccarat.deck = createDeck();
+  baccarat.playerHand = [baccarat.deck.pop(), baccarat.deck.pop()];
+  baccarat.dealerHand = [baccarat.deck.pop(), baccarat.deck.pop()];
+
+  const playerThird = baccaratShouldPlayerDraw(baccarat.playerHand);
+  if (playerThird) baccarat.playerHand.push(baccarat.deck.pop());
+
+  if (baccaratShouldDealerDraw(baccarat.dealerHand, baccarat.playerHand)) {
+    baccarat.dealerHand.push(baccarat.deck.pop());
+  }
+
+  render();
+  scheduleBaccaratRevealStep(0);
+}
+
+function baccaratRevealSequence() {
+  const sequence = [
+    { side: "player", index: 1, title: "Player Card", detail: "Player turns the first card." },
+    { side: "dealer", index: 1, title: "Dealer Card", detail: "Dealer answers from the shoe." },
+    { side: "player", index: 2, title: "Player Card", detail: "Player reveals the second card." },
+    { side: "dealer", index: 2, title: "Dealer Card", detail: "Dealer reveals the second card." },
+  ];
+
+  if (state.baccarat.playerHand.length > 2) {
+    sequence.push({ side: "player", index: 3, title: "Player Draws", detail: "Player takes a third card." });
+  }
+
+  if (state.baccarat.dealerHand.length > 2) {
+    sequence.push({ side: "dealer", index: 3, title: "Dealer Draws", detail: "Dealer takes a third card." });
+  }
+
+  return sequence;
+}
+
+function scheduleBaccaratRevealStep(stepIndex) {
+  const baccarat = state.baccarat;
+  const sequence = baccaratRevealSequence();
+  const step = sequence[stepIndex];
+
+  if (!step) {
+    state.pendingReveal = {
+      game: "baccarat",
+      title: "Counting",
+      detail: "Totals are being counted...",
+    };
+    render();
+    scheduleUiTask(() => {
+      resolveBaccaratRound();
+    }, 420);
+    return;
+  }
+
+  state.pendingReveal = {
+    game: "baccarat",
+    title: step.title,
+    detail: step.detail,
+  };
+  baccarat.lastRevealedSide = null;
+  baccarat.lastRevealedIndex = -1;
+  render();
+
+  scheduleUiTask(() => {
+    if (step.side === "player") {
+      baccarat.revealedPlayerCards = Math.max(baccarat.revealedPlayerCards, step.index);
+    } else {
+      baccarat.revealedDealerCards = Math.max(baccarat.revealedDealerCards, step.index);
+    }
+    baccarat.lastRevealedSide = step.side;
+    baccarat.lastRevealedIndex = step.index - 1;
+    render();
+    scheduleUiTask(() => {
+      scheduleBaccaratRevealStep(stepIndex + 1);
+    }, 560);
+  }, stepIndex === 0 ? 380 : 560);
+}
+
+function baccaratShouldPlayerDraw(hand) {
+  return baccaratHandTotal(hand) <= 5;
+}
+
+function baccaratShouldDealerDraw(dealerHand, playerHand) {
+  const dealerTotal = baccaratHandTotal(dealerHand);
+  if (dealerTotal <= 2) return true;
+
+  const playerThird = playerHand.length === 3 ? baccaratCardValue(playerHand[2]) : null;
+  if (playerHand.length === 2) {
+    return dealerTotal <= 5;
+  }
+
+  if (dealerTotal === 3) return playerThird !== 8;
+  if (dealerTotal === 4) return playerThird !== null && playerThird >= 2 && playerThird <= 7;
+  if (dealerTotal === 5) return playerThird !== null && playerThird >= 4 && playerThird <= 7;
+  if (dealerTotal === 6) return playerThird !== null && playerThird >= 6 && playerThird <= 7;
+  return false;
+}
+
+function resolveBaccaratRound() {
+  const baccarat = state.baccarat;
+  const playerTotal = baccaratHandTotal(baccarat.playerHand);
+  const dealerTotal = baccaratHandTotal(baccarat.dealerHand);
+  const bets = baccarat.bets;
+  const staked = totalBaccaratBets();
+  let payout = 0;
+  let title = "Baccarat";
+  let summary = `Player ${playerTotal} vs Dealer ${dealerTotal}`;
+  let winningSide = "tie";
+
+  if (playerTotal > dealerTotal) {
+    title = "Player Wins";
+    summary = `Player ${playerTotal} beats Dealer ${dealerTotal}.`;
+    winningSide = "player";
+    payout += bets.player * 2;
+  } else if (dealerTotal > playerTotal) {
+    title = "Dealer Wins";
+    summary = `Dealer ${dealerTotal} beats Player ${playerTotal}.`;
+    winningSide = "dealer";
+    payout += bets.dealer * 2;
+  } else {
+    title = "Tie";
+    summary = `Both sides land on ${playerTotal}.`;
+    winningSide = "tie";
+    payout += bets.player;
+    payout += bets.dealer;
+    payout += bets.tie * (BACCARAT_TIE_PAYOUT + 1);
+  }
+
+  const net = Math.round((payout - staked) * 100) / 100;
+  const tone = net > 0 ? "win" : net < 0 ? "loss" : "idle";
+  const detail = net > 0
+    ? `${summary} Profit $${formatMoney(net)}.`
+    : net < 0
+      ? `${summary} Lost $${formatMoney(Math.abs(net))}.`
+      : `${summary} Push.`;
+
+  adjustWallet(payout);
+  awardRoundXp("Baccarat");
+  baccarat.phase = "betting";
+  baccarat.revealedPlayerCards = baccarat.playerHand.length;
+  baccarat.revealedDealerCards = baccarat.dealerHand.length;
+  baccarat.lastRevealedSide = null;
+  baccarat.lastRevealedIndex = -1;
+  baccarat.result = {
+    title,
+    detail,
+    tone,
+    winningSide,
+    bets: { ...bets },
+    betChips: cloneBaccaratChips(baccarat.betChips),
+    payout,
+    net,
+    playerTotal,
+    dealerTotal,
+  };
+  baccarat.lastBets = { ...baccarat.bets };
+  baccarat.lastBetChips = cloneBaccaratChips(baccarat.betChips);
+  baccarat.bets = { player: 0, dealer: 0, tie: 0 };
+  baccarat.betChips = emptyBaccaratChips();
+  baccarat.message = detail;
+  state.pendingReveal = null;
+  render();
+
+  openPopupWithDelay({
+    tone,
+    title,
+    detail: net > 0
+      ? `Profit $${formatMoney(net)}`
+      : net < 0
+        ? `Lost $${formatMoney(Math.abs(net))}`
+        : "Push.",
+    buttonLabel: "Next Hand",
+  }, 320);
+}
+
+function canStartRideTheBus() {
+  return state.bus.phase === "betting" && state.bus.wager > 0;
+}
+
+function rideTheBusCashOutMultiplier() {
+  const bus = state.bus;
+  if (bus.phase !== "guessing" || bus.step <= 0) return 0;
+  const previousStep = RIDE_BUS_STEPS[bus.step - 1];
+  return previousStep ? previousStep.multiplier : 0;
+}
+
+function rideTheBusCashOutValue() {
+  return Math.round(state.bus.wager * rideTheBusCashOutMultiplier() * 100) / 100;
+}
+
+function rideTheBusNextMultiplier() {
+  const step = RIDE_BUS_STEPS[state.bus.step];
+  return step ? step.multiplier : 0;
+}
+
+function placeRideTheBusBet(amount) {
+  const bus = state.bus;
+  if (bus.phase !== "betting") {
+    bus.message = "Wait for the current ride to finish.";
+    render();
+    return;
+  }
+
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (chip > state.wallet) {
+    bus.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+
+  adjustWallet(-chip);
+  bus.wager += chip;
+  bus.wagerChips.push(chip);
+  bus.message = `Wager $${formatMoney(bus.wager)}`;
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function clearRideTheBusBet() {
+  const bus = state.bus;
+  if (!bus.wager) return;
+  adjustWallet(bus.wager);
+  bus.wager = 0;
+  bus.wagerChips = [];
+  bus.message = "Bet cleared.";
+  state.pendingReveal = null;
+  state.popup = null;
+  render();
+}
+
+function cashOutRideTheBus() {
+  const bus = state.bus;
+  const multiplier = rideTheBusCashOutMultiplier();
+  const payout = rideTheBusCashOutValue();
+  if (bus.phase !== "guessing" || payout <= 0) return;
+
+  adjustWallet(payout);
+  awardRoundXp("Ride the Bus");
+  bus.phase = "betting";
+  bus.result = {
+    title: "Cashed Out",
+    detail: `Banked $${formatMoney(payout)} at ${multiplier}x.`,
+    tone: "win",
+  };
+  bus.message = bus.result.detail;
+  bus.wager = 0;
+  bus.wagerChips = [];
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: "win",
+    title: "Ride Banked",
+    detail: `You cashed out for $${formatMoney(payout)}.`,
+    buttonLabel: "Ride Again",
+  }, 300);
+}
+
+function startRideTheBus() {
+  const bus = state.bus;
+  if (!canStartRideTheBus()) return;
+
+  clearPendingPopupTimer();
+  state.popup = null;
+  state.pendingReveal = {
+    game: "bus",
+    title: "Riding",
+    detail: "The first card is on the rail...",
+  };
+  bus.phase = "guessing";
+  bus.cards = [];
+  bus.result = null;
+  bus.step = 0;
+  render();
+
+  scheduleUiTask(() => {
+    if (bus.deck.length < 8) bus.deck = createDeck();
+    bus.cards = [bus.deck.pop()];
+    bus.message = "Red or black?";
+    state.pendingReveal = null;
+    render();
+  }, 420);
+}
+
+function answerRideTheBusGuess(guess) {
+  const bus = state.bus;
+  if (bus.phase !== "guessing") return;
+  const step = RIDE_BUS_STEPS[bus.step];
+  if (!step) return;
+
+  if (bus.deck.length < 1) bus.deck = createDeck();
+  const card = bus.deck.pop();
+  const previous = bus.cards[bus.cards.length - 1];
+  let correct = false;
+
+  if (step.id === "red-black") {
+    const isRed = ["hearts", "diamonds"].includes(card.suit);
+    correct = (guess === "red" && isRed) || (guess === "black" && !isRed);
+  } else if (step.id === "higher-lower") {
+    const previousValue = busRankValue(previous.rank);
+    const currentValue = busRankValue(card.rank);
+    correct = (guess === "higher" && currentValue > previousValue) || (guess === "lower" && currentValue < previousValue);
+  } else if (step.id === "inside-outside") {
+    const values = bus.cards.slice(-2).map((c) => busRankValue(c.rank)).sort((a, b) => a - b);
+    const currentValue = busRankValue(card.rank);
+    correct = (guess === "inside" && currentValue > values[0] && currentValue < values[1]) ||
+      (guess === "outside" && (currentValue < values[0] || currentValue > values[1]));
+  } else if (step.id === "suit") {
+    correct = guess === card.suit;
+  }
+
+  bus.cards.push(card);
+  if (!correct) {
+    bus.phase = "betting";
+    bus.result = {
+      title: "Busted",
+      detail: `Wrong guess on ${step.label.toLowerCase()}.`,
+      tone: "loss",
+    };
+    bus.message = bus.result.detail;
+    bus.wager = 0;
+    bus.wagerChips = [];
+    state.pendingReveal = null;
+    render();
+    openPopupWithDelay({
+      tone: "loss",
+      title: "Bus Bust",
+      detail: "The ride stops here.",
+      buttonLabel: "Try Again",
+    }, 300);
+    return;
+  }
+
+  bus.step += 1;
+  if (bus.step >= RIDE_BUS_STEPS.length) {
+    const finalMultiplier = RIDE_BUS_STEPS[RIDE_BUS_STEPS.length - 1].multiplier;
+    const payout = Math.round(bus.wager * finalMultiplier * 100) / 100;
+    adjustWallet(payout);
+    awardRoundXp("Ride the Bus");
+    bus.phase = "betting";
+    bus.result = {
+      title: "Ride Complete",
+      detail: `Won $${formatMoney(payout)}`,
+      tone: "win",
+    };
+    bus.message = bus.result.detail;
+    bus.wager = 0;
+    bus.wagerChips = [];
+    state.pendingReveal = null;
+    render();
+    openPopupWithDelay({
+      tone: "win",
+      title: "Ride the Bus",
+      detail: `You rode the whole hand for $${formatMoney(payout)}.`,
+      buttonLabel: "Ride Again",
+    }, 300);
+    return;
+  }
+
+  bus.message = `Cash out $${formatMoney(rideTheBusCashOutValue())} or ride for ${rideTheBusNextMultiplier()}x.`;
+  render();
+}
+
+function busRankValue(rank) {
+  if (rank === "A") return 1;
+  if (rank === "J") return 11;
+  if (rank === "Q") return 12;
+  if (rank === "K") return 13;
+  return Number(rank);
+}
+
+function renderHandCards(cards) {
+  return cards.length ? cards.map((card) => renderCard(card)).join("") : `<div class="bus-empty-hand"></div>`;
+}
+
+function renderJoku() {
+  const joku = state.joku;
+  return `
+    <section class="joku-screen surface ${escapeAttribute(joku.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderJokuResult()}
+        <div class="status-pill muted">${joku.cardsRemaining} cards left</div>
+      </div>
+
+      <div class="joku-table">
+        <div class="joku-felt">
+          <div class="joku-main">
+            <div class="joku-slots">
+              ${renderJokuSlots()}
+            </div>
+            <div class="joku-grid-wrap">
+              <div class="joku-grid">
+                ${joku.grid.map((card, index) => renderJokuCard(card, index)).join("")}
+              </div>
+            </div>
+            <div class="joku-controls">
+              <button class="pixel-button green" data-action="joku-play" ${canPlayJoku() ? "" : "disabled"}>Play</button>
+              <button class="pixel-button gold" data-action="joku-cashout" ${canCashOutJoku() ? "" : "disabled"}>Cash Out</button>
+              <button class="pixel-button" data-action="joku-reset" ${canResetJoku() ? "" : "disabled"}>New Game</button>
+            </div>
+          </div>
+
+          <aside class="joku-rail">
+            <div class="joku-rail-card">
+              <span>Points</span>
+              <strong>${state.joku.score}</strong>
+            </div>
+            <div class="joku-rail-card">
+              <span>Cash Out</span>
+              <strong>$${formatMoney(state.joku.cashOut)}</strong>
+            </div>
+            <div class="joku-rail-card">
+              <span>Combos</span>
+              <strong>${state.joku.comboCount}</strong>
+            </div>
+            <div class="joku-rail-card">
+              <span>Deck</span>
+              <strong>${state.joku.cardsRemaining}</strong>
+            </div>
+            <div class="joku-free-note">${escapeHtml(joku.message)}</div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="joku-free-note">Find 5-card hands, keep the board alive, and cash out when the shoe is done.</div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderJokuSlots() {
+  const joku = state.joku;
+  const selectedCards = joku.selectedIndices.map((idx) => joku.grid[idx]);
+  const slots = Array.from({ length: JOKU_HAND_SIZE }, (_, i) => selectedCards[i] || { hidden: true });
+  return slots.map((card) => renderCard(card)).join("");
+}
+
+function renderJokuCard(card, index) {
+  if (!card) {
+    return `<div class="joku-grid-card empty"></div>`;
+  }
+
+  const joku = state.joku;
+  const selected = joku.selectedIndices.includes(index);
+  const isNew = joku.newIndices.includes(index);
+  const isFreshCard = joku.newCardIndices.includes(index);
+  const fallDistance = joku.fallDistances[index] || 1;
+  const { row, col } = cardSpritePosition(card);
+
+  return `
+    <button class="playing-card joku-grid-card ${selected ? "selected" : ""} ${isNew ? "falling" : ""} ${isFreshCard ? "fresh" : ""}" 
+            data-action="joku-select" data-index="${index}" aria-label="${card.rank} of ${card.suit}"
+            style="--col-delay: ${index % 5}; --fall-rows: ${fallDistance}">
+      <div class="card-face" style="background-position:${col * -72}px ${row * -98}px"></div>
+    </button>
+  `;
+}
+
+function renderJokuResult() {
+  const joku = state.joku;
+  if (state.pendingReveal && state.pendingReveal.game === "joku") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
+  if (joku.phase === "finished" || joku.phase === "cashed-out") {
+    return `
+      <div class="result-board win">
+        <div class="result-main">${joku.phase === "cashed-out" ? "Cashed Out" : "Cash Out Ready"}</div>
+        <div class="result-sub">${escapeHtml(joku.message)}</div>
+      </div>
+    `;
+  }
+
+  if (joku.result) {
+    return `
+      <div class="result-board win">
+        <div class="result-main">${escapeHtml(joku.result.rank)}</div>
+        <div class="result-sub">+${joku.result.points} pts</div>
+      </div>
+    `;
+  }
+
+  const needed = JOKU_HAND_SIZE - joku.selectedIndices.length;
+  const instruction = needed > 0 ? `Select ${needed} more card${needed === 1 ? "" : "s"}.` : "Hand ready to play.";
+  return `
+    <div class="result-board idle">
+      <div class="result-main">JØKU</div>
+      <div class="result-sub">${escapeHtml(instruction)}</div>
+    </div>
+  `;
+}
+
+function renderBaccarat() {
+  const baccarat = state.baccarat;
+  return `
+    <section class="baccarat-screen surface ${escapeAttribute(baccarat.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderBaccaratResult()}
+        <div class="status-pill muted">Bet $${formatMoney(totalBaccaratBets())}</div>
+      </div>
+
+      <div class="baccarat-table">
+        <div class="baccarat-felt">
+          <button class="baccarat-row baccarat-row-player ${state.hoverBetId === "baccarat-player" ? "hover" : ""} ${baccaratRowOutcomeClass("player")}" data-action="baccarat-place" data-side="player" data-bet-zone="baccarat-player">
+            <div class="baccarat-head">
+              <span>Player</span>
+              ${renderBaccaratTotal("player")}
+            </div>
+            <div class="baccarat-bet-chips">${renderBaccaratBetChips("player")}</div>
+            <div class="baccarat-cards">${renderBaccaratHandCards("player")}</div>
+          </button>
+
+          <button class="baccarat-row baccarat-row-tie ${state.hoverBetId === "baccarat-tie" ? "hover" : ""} ${baccaratRowOutcomeClass("tie")}" data-action="baccarat-place" data-side="tie" data-bet-zone="baccarat-tie">
+            <span>Tie</span>
+            <div class="baccarat-bet-chips tie-chips">${renderBaccaratBetChips("tie")}</div>
+          </button>
+
+          <button class="baccarat-row baccarat-row-dealer ${state.hoverBetId === "baccarat-dealer" ? "hover" : ""} ${baccaratRowOutcomeClass("dealer")}" data-action="baccarat-place" data-side="dealer" data-bet-zone="baccarat-dealer">
+            <div class="baccarat-head">
+              <span>Dealer</span>
+              ${renderBaccaratTotal("dealer")}
+            </div>
+            <div class="baccarat-bet-chips">${renderBaccaratBetChips("dealer")}</div>
+            <div class="baccarat-cards">${renderBaccaratHandCards("dealer")}</div>
+          </button>
+
+          <div class="baccarat-controls">
+            <button class="pixel-button green" data-action="baccarat-deal" ${canDealBaccarat() ? "" : "disabled"}>Deal</button>
+            <button class="pixel-button red" data-action="baccarat-clear" ${totalBaccaratBets() ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="baccarat-repeat" ${canRepeatBaccarat() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="chip-tray">
+          ${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}
+        </div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderBaccaratResult() {
+  const baccarat = state.baccarat;
+  if (state.pendingReveal && state.pendingReveal.game === "baccarat") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
+  if (baccarat.result) {
+    return `
+      <div class="result-board ${baccarat.result.tone}">
+        <div class="result-main">${escapeHtml(baccarat.result.title)}</div>
+        <div class="result-sub">${escapeHtml(baccarat.result.detail)}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Baccarat</div>
+      <div class="result-sub">${escapeHtml(baccarat.message)}</div>
+    </div>
+  `;
+}
+
+function renderBaccaratHandCards(side) {
+  const baccarat = state.baccarat;
+  const hand = side === "player" ? baccarat.playerHand : baccarat.dealerHand;
+  const revealedCount = side === "player" ? baccarat.revealedPlayerCards : baccarat.revealedDealerCards;
+  const visibleCards = hand.map((card, index) => (index < revealedCount ? card : { hidden: true }));
+  return visibleCards.length
+    ? visibleCards.map((card, index) => renderCard(card, baccarat.lastRevealedSide === side && baccarat.lastRevealedIndex === index)).join("")
+    : `<div class="bus-empty-hand"></div>`;
+}
+
+function renderBaccaratTotal(side) {
+  const baccarat = state.baccarat;
+  const hand = side === "player" ? baccarat.playerHand : baccarat.dealerHand;
+  const revealedCount = side === "player" ? baccarat.revealedPlayerCards : baccarat.revealedDealerCards;
+  if (!revealedCount) return `<strong class="baccarat-total muted">Total --</strong>`;
+  const total = baccaratHandTotal(hand.slice(0, revealedCount));
+  return `<strong class="baccarat-total">Total ${total}</strong>`;
+}
+
+function baccaratDisplayedChips(side) {
+  const baccarat = state.baccarat;
+  if (baccarat.result && baccarat.result.betChips) {
+    return baccarat.result.betChips[side] || [];
+  }
+  return baccarat.betChips[side] || [];
+}
+
+function renderBaccaratBetChips(side) {
+  const chips = baccaratDisplayedChips(side);
+  if (!chips.length) return "";
+  return chips.map((value, index) => `
+    <div class="placed-chip baccarat-chip chip-${chipClassForValue(value)}" style="left:${18 + index * 11}px;top:${8 + (index % 2) * 9}px">
+      $${formatChipValue(value)}
+    </div>
+  `).join("");
+}
+
+function baccaratRowOutcomeClass(side) {
+  const result = state.baccarat.result;
+  if (!result || !result.bets || !result.bets[side]) return "";
+
+  if (result.winningSide === side) {
+    return result.net > 0 ? "settled-win" : "settled-push";
+  }
+
+  if (result.winningSide === "tie" && (side === "player" || side === "dealer")) {
+    return "settled-push";
+  }
+
+  return "settled-loss";
+}
+
+function renderRideTheBus() {
+  const bus = state.bus;
+  return `
+    <section class="bus-screen surface ${escapeAttribute(bus.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderRideTheBusResult()}
+        <div class="status-pill muted">Bet $${formatMoney(bus.wager)}</div>
+      </div>
+
+      <div class="bus-table">
+        <div class="bus-felt">
+          <div class="bus-lane">
+            <div class="bus-current-card">${renderCard(bus.cards[bus.cards.length - 1] || { hidden: true })}</div>
+            <div class="bus-tracks">
+              ${RIDE_BUS_STEPS.map((step, index) => `
+                <div class="bus-track ${index < bus.step ? "done" : index === bus.step ? "active" : ""}">
+                  <div class="bus-track-head">
+                    <strong>${escapeHtml(step.label)}</strong>
+                    <em>${step.multiplier}x</em>
+                  </div>
+                  <span>${escapeHtml(step.detail)}</span>
+                  <small>${bus.wager ? `$${formatMoney(Math.round(bus.wager * step.multiplier * 100) / 100)}` : "No wager"}</small>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <button class="bus-pot ${state.hoverBetId === "bus-main" ? "hover" : ""}" data-action="bus-bet" data-bet-zone="bus-main">
+            <span>Wager</span>
+            <strong>$${formatMoney(bus.wager)}</strong>
+            <em>${rideTheBusCashOutValue() > 0 ? `Cash out $${formatMoney(rideTheBusCashOutValue())}` : `Top ride $${formatMoney(Math.round(bus.wager * RIDE_BUS_STEPS[RIDE_BUS_STEPS.length - 1].multiplier * 100) / 100)}`}</em>
+            <div class="bus-bet-chips">${renderBusWagerChips()}</div>
+          </button>
+
+          <div class="bus-guess-zone">
+            ${renderRideTheBusGuessButtons()}
+          </div>
+
+          <div class="bus-controls">
+            <button class="pixel-button green" data-action="bus-play" ${canStartRideTheBus() ? "" : "disabled"}>Ride</button>
+            <button class="pixel-button gold" data-action="bus-cashout" ${rideTheBusCashOutValue() > 0 ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button red" data-action="bus-clear" ${bus.wager ? "" : "disabled"}>Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wallet-tray">
+        <div class="wallet-strip">
+          <span class="wallet-strip-label">Wallet</span>
+          <strong>$${formatMoney(state.wallet)}</strong>
+        </div>
+        <div class="chip-tray">
+          ${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}
+        </div>
+      </div>
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderRideTheBusResult() {
+  const bus = state.bus;
+  if (state.pendingReveal && state.pendingReveal.game === "bus") {
+    return `
+      <div class="result-board pending">
+        <div class="result-main">${escapeHtml(state.pendingReveal.title)}</div>
+        <div class="result-sub">${escapeHtml(state.pendingReveal.detail)}</div>
+      </div>
+    `;
+  }
+
+  if (bus.result) {
+    return `
+      <div class="result-board ${bus.result.tone}">
+        <div class="result-main">${escapeHtml(bus.result.title)}</div>
+        <div class="result-sub">${escapeHtml(bus.result.detail)}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="result-board idle">
+      <div class="result-main">Ride the Bus</div>
+      <div class="result-sub">${escapeHtml(bus.message)}</div>
+    </div>
+  `;
+}
+
+function renderRideTheBusGuessButtons() {
+  const bus = state.bus;
+  if (bus.phase !== "guessing") {
+    return `<div class="bus-guess-note">Deal the first card, then start guessing.</div>`;
+  }
+
+  const step = RIDE_BUS_STEPS[bus.step];
+  if (!step) return "";
+
+  if (step.id === "red-black") {
+    return `
+      <button class="pixel-button" data-action="bus-guess" data-guess="red">Red</button>
+      <button class="pixel-button" data-action="bus-guess" data-guess="black">Black</button>
+    `;
+  }
+
+  if (step.id === "higher-lower") {
+    return `
+      <button class="pixel-button" data-action="bus-guess" data-guess="higher">Higher</button>
+      <button class="pixel-button" data-action="bus-guess" data-guess="lower">Lower</button>
+    `;
+  }
+
+  if (step.id === "inside-outside") {
+    return `
+      <button class="pixel-button" data-action="bus-guess" data-guess="inside">Inside</button>
+      <button class="pixel-button" data-action="bus-guess" data-guess="outside">Outside</button>
+    `;
+  }
+
+  return `
+    ${["spades", "hearts", "diamonds", "clubs"].map((suit) => `
+      <button class="pixel-button" data-action="bus-guess" data-guess="${suit}">${suit[0].toUpperCase() + suit.slice(1)}</button>
+    `).join("")}
+  `;
+}
+
+function renderBusWagerChips() {
+  if (!state.bus.wagerChips.length) return "";
+  return state.bus.wagerChips.map((value, index) => `
+    <div class="placed-chip slot-chip chip-${chipClassForValue(value)}" style="left:${34 + index * 12}px;top:${26 + (index % 2) * 10}px">
+      $${formatChipValue(value)}
+    </div>
+  `).join("");
 }
