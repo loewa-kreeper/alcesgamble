@@ -1,5 +1,5 @@
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const CHIP_VALUES = [1, 5, 10, 25, 100, 500];
+const CHIP_VALUES = [1, 5, 10, 25, 100, 500, 1000, 2500];
 const MAX_BETS = {
   roulette: 20000,
   blackjack: 50000,
@@ -8,6 +8,38 @@ const MAX_BETS = {
   bus: 20000,
   plinko: 25000,
   crash: 10000,
+  coinflip: 25000,
+  mines: 25000,
+  hotline: 25000,
+  dice: 25000,
+  goal: 25000,
+  keno: 15000,
+};
+const BETTABLE_GAMES = ["roulette", "blackjack", "slots", "baccarat", "bus", "plinko", "crash", "coinflip", "mines", "hotline", "dice", "goal", "keno"];
+const ALL_GAMES = [...BETTABLE_GAMES, "joku", "minesweeper", "yahtzee"];
+const GAME_PLAY_AMOUNTS = {
+  roulette: 20,
+  slots: 20,
+  plinko: 20,
+  coinflip: 20,
+  hotline: 20,
+  dice: 20,
+  baccarat: 15,
+  keno: 15,
+  goal: 15,
+  mines: 15,
+  blackjack: 10,
+  bus: 10,
+  crash: 10,
+  joku: 10,
+  minesweeper: 5,
+  yahtzee: 3
+};
+const QUEST_GEN_DATA = {
+  play_specific: { rewardMoney: 2000, rewardXp: 500 },
+  bet_specific: { amount: 2500, rewardMoney: 3000, rewardXp: 500 },
+  play_total: { amount: 50, rewardMoney: 3000, rewardXp: 500 },
+  bet_total: { amount: 10000, rewardMoney: 5000, rewardXp: 600 }
 };
 const numberSequence = Array.from({ length: 36 }, (_, index) => index + 1);
 const TABLE_ASPECT = 1790 / 887;
@@ -36,22 +68,61 @@ const JOKU_PAYOUTS = [
 ];
 const BACCARAT_TIE_PAYOUT = 8;
 const PLINKO_ROWS = 16;
-const PLINKO_MULTIPLIERS = [10, 5, 3, 2, 1, 0.8, 0.5, 0.2, 0, 0.2, 0.5, 0.8, 1, 2, 3, 5, 10];
-const CRASH_GROWTH_PER_TICK = 0.035;
-const CRASH_TICK_MS = 120;
-const CRASH_CASHOUT_COUNTDOWN_MS = 1000;
-const CRASH_HOUSE_RETURN = 0.9;
-const MIN_CRASH_POINT = 0.9;
+const PLINKO_MULTIPLIERS = [10, 5, 3, 2, 1.5, 1, 0.8, 0.2, 0, 0.2, 0.8, 1, 1.5, 2, 3, 5, 10];
+const CRASH_GROWTH_PER_TICK = 0.025;
+const CRASH_TICK_MS = 140;
+const CRASH_CASHOUT_COUNTDOWN_MS = 1500;
+const CRASH_CASHOUT_COUNTDOWN_STEP_MS = 50;
+const MIN_CRASH_CASHOUT = 0.9;
 const MINESWEEPER_ROWS = 9;
 const MINESWEEPER_COLS = 9;
 const MINESWEEPER_MINES = 10;
 const MINESWEEPER_POINT_VALUE = 1;
+const COINFLIP_SIDE_CHANCE = 0.03;
+const COINFLIP_PAYOUTS = { heads: 2, tails: 2, side: 30 };
+const CASINO_MINES_ROWS = 5;
+const CASINO_MINES_COLS = 5;
+const CASINO_MINES_COUNT = 4;
+const CASINO_MINES_PAYOUT_CURVE_MINES = 3;
+const CASINO_MINES_EDGE = 0.96;
+const HOTLINE_REEL_COUNTS = { black: 17, red: 17, yellow: 1 };
+const HOTLINE_NORMAL_PAYOUTS = { black: 2, red: 2, yellow: 30 };
+const HOTLINE_COLORS = ["black", "red", "yellow"];
+const HOTLINE_SPIN_SETS = 3;
+const HOTLINE_SPIN_TAIL_CARDS = 7;
+const HOTLINE_SPIN_MS = 12000;
+const DICE_CHANCES = [25, 50, 75];
+const DICE_EDGE = 0.96;
+const GOAL_EDGE = 0.9;
+const GOAL_FIELDS = {
+  small: { cols: 4, rows: 3, label: "Small" },
+  medium: { cols: 7, rows: 4, label: "Medium" },
+  large: { cols: 10, rows: 5, label: "Large" },
+};
+const RANK_TIERS = [
+  "Bronze",
+  "Silver",
+  "Gold",
+  "Platin",
+  "Diamond",
+  "Master",
+  "Grandmaster",
+  "Legend",
+  "Mythic",
+];
+const THEME_STORAGE_KEY = "gamblers_theme";
+const KENO_ROWS = 6;
+const KENO_COLS = 6;
+const KENO_PICKS = 5;
+const KENO_DRAW_COUNT = 10;
+const KENO_MULTIPLIERS = { 1: 0.1, 2: 1, 3: 3, 4: 15, 5: 35 };
 const RIDE_BUS_STEPS = [
   { id: "red-black", label: "Red or Black", detail: "Guess the next card color.", multiplier: 1.5 },
   { id: "higher-lower", label: "Higher or Lower", detail: "Beat the last card.", multiplier: 2.5 },
   { id: "inside-outside", label: "Inside or Outside", detail: "Guess whether it falls inside the range.", multiplier: 5 },
   { id: "suit", label: "Suit", detail: "Call the suit to ride the bus.", multiplier: 12 },
 ];
+const RIDE_BUS_MIDDLE_START_CHANCE = 0.65;
 const SLOT_PATTERNS = [
   { name: "HOR", multiplier: 1, variants: buildSlotHorizontalVariants(3) },
   { name: "VERT", multiplier: 1, variants: [[[0, 0], [1, 0], [2, 0]], [[0, 1], [1, 1], [2, 1]], [[0, 2], [1, 2], [2, 2]], [[0, 3], [1, 3], [2, 3]], [[0, 4], [1, 4], [2, 4]]] },
@@ -191,6 +262,72 @@ const state = {
     result: null,
     message: "Place a wager and launch.",
   },
+  coinflip: {
+    phase: "betting",
+    bets: { heads: 0, tails: 0, side: 0 },
+    betChips: { heads: [], tails: [], side: [] },
+    lastBets: { heads: 0, tails: 0, side: 0 },
+    face: "heads",
+    result: null,
+    message: "Bet heads, tails, or the 3% side.",
+  },
+  mines: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    board: [],
+    safePicks: 0,
+    multiplier: 1,
+    result: null,
+    message: "Place chips, start, then dodge the mines.",
+  },
+  hotline: {
+    phase: "betting",
+    bets: { black: 0, red: 0, yellow: 0 },
+    betChips: { black: [], red: [], yellow: [] },
+    lastBets: { black: 0, red: 0, yellow: 0 },
+    mode: "normal",
+    reels: [],
+    targetIndex: 17,
+    result: null,
+    message: "Bet red, black, or yellow.",
+  },
+  dice: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    side: "under",
+    chance: 50,
+    roll: null,
+    result: null,
+    message: "Set the chance, place chips, and roll.",
+  },
+  goal: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    size: "small",
+    board: [],
+    ballRow: 1,
+    column: -1,
+    safePicks: 0,
+    multiplier: 1,
+    result: null,
+    message: "Pick a field, place chips, and kick off.",
+  },
+  keno: {
+    phase: "betting",
+    wager: 0,
+    wagerChips: [],
+    lastWager: 0,
+    picks: [],
+    drawn: [],
+    result: null,
+    message: "Pick exactly 5 numbers, place chips, and draw.",
+  },
   minesweeper: {
     phase: "playing",
     board: [],
@@ -217,7 +354,16 @@ const state = {
     message: "Roll the dice to start!",
     bonus: 0,
     total: 0
-  }
+  },
+  quests: [],
+  questProgress: {
+    plays: {},
+    bets: {},
+    totalPlays: 0,
+    totalBets: 0,
+    completed: []
+  },
+  lastQuestDate: null
 };
 
 const dragState = {
@@ -234,6 +380,7 @@ const betDefinitions = buildBetDefinitions();
 const appView = document.getElementById("app-view");
 const walletBalance = document.getElementById("wallet-balance");
 const playerLevel = document.getElementById("player-level");
+const playerRank = document.getElementById("player-rank");
 const playerXp = document.getElementById("player-xp");
 const xpFill = document.getElementById("xp-fill");
 const authForm = document.getElementById("auth-form");
@@ -269,6 +416,7 @@ const menuState = {
   settingsOpen: false,
   showAllBalance: false,
   showAllXp: false,
+  theme: loadThemePreference(),
 };
 
 let walletSaveTimer = null;
@@ -290,9 +438,14 @@ logoutButton.addEventListener("click", () => {
 });
 
 settingsButton.addEventListener("click", () => {
-  if (!authState.account) return;
   menuState.settingsOpen = true;
   render();
+});
+
+appView.addEventListener("change", (event) => {
+  const themeToggle = event.target.closest("#settings-theme-toggle");
+  if (!themeToggle) return;
+  setTheme(themeToggle.checked ? "light" : "dark");
 });
 
 appView.addEventListener("click", (event) => {
@@ -391,6 +544,75 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "open-coinflip") {
+    clearPendingPopupTimer();
+    state.currentScreen = "coinflip";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
+  if (action === "open-mines") {
+    clearPendingPopupTimer();
+    resetCasinoMinesForExit(true);
+    state.currentScreen = "mines";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
+  if (action === "open-hotline") {
+    clearPendingPopupTimer();
+    state.currentScreen = "hotline";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
+  if (action === "open-dice") {
+    clearPendingPopupTimer();
+    state.currentScreen = "dice";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
+  if (action === "open-goal") {
+    clearPendingPopupTimer();
+    resetGoalForExit(true);
+    state.currentScreen = "goal";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
+  if (action === "open-keno") {
+    clearPendingPopupTimer();
+    resetKenoForExit(true);
+    state.currentScreen = "keno";
+    scrollGameToTop();
+    state.popup = null;
+    state.pendingReveal = null;
+    state.rouletteSpinActive = false;
+    render();
+    return;
+  }
+
   if (action === "open-minesweeper") {
     clearPendingPopupTimer();
     resetMinesweeper();
@@ -441,10 +663,6 @@ appView.addEventListener("click", (event) => {
   }
 
   if (action === "open-settings") {
-    if (!authState.account) {
-      setAuthMessage("Log in to manage settings.");
-      return;
-    }
     menuState.settingsOpen = true;
     render();
     return;
@@ -648,6 +866,176 @@ appView.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "coinflip-bet") {
+    placeCoinflipBet(actionTarget.dataset.side, state.selectedAmount);
+    return;
+  }
+
+  if (action === "coinflip-flip") {
+    flipCoin();
+    return;
+  }
+
+  if (action === "coinflip-clear") {
+    clearCoinflipBets();
+    return;
+  }
+
+  if (action === "coinflip-repeat") {
+    repeatCoinflipBets();
+    return;
+  }
+
+  if (action === "mines-bet") {
+    placeCasinoMinesBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "mines-start") {
+    startCasinoMinesRound();
+    return;
+  }
+
+  if (action === "mines-open") {
+    revealCasinoMine(Number(actionTarget.dataset.index));
+    return;
+  }
+
+  if (action === "mines-cashout") {
+    cashOutCasinoMines();
+    return;
+  }
+
+  if (action === "mines-clear") {
+    clearCasinoMinesBet();
+    return;
+  }
+
+  if (action === "mines-repeat") {
+    repeatCasinoMinesBet();
+    return;
+  }
+
+  if (action === "hotline-bet") {
+    placeHotlineBet(actionTarget.dataset.side, state.selectedAmount);
+    return;
+  }
+
+  if (action === "hotline-spin") {
+    spinHotline();
+    return;
+  }
+
+  if (action === "hotline-mode") {
+    toggleHotlineMode();
+    return;
+  }
+
+  if (action === "hotline-clear") {
+    clearHotlineBets();
+    return;
+  }
+
+  if (action === "hotline-repeat") {
+    repeatHotlineBets();
+    return;
+  }
+
+  if (action === "dice-bet") {
+    placeDiceBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "dice-roll") {
+    rollDiceRound();
+    return;
+  }
+
+  if (action === "dice-clear") {
+    clearDiceBet();
+    return;
+  }
+
+  if (action === "dice-repeat") {
+    repeatDiceBet();
+    return;
+  }
+
+  if (action === "dice-side") {
+    setDiceSide(actionTarget.dataset.side);
+    return;
+  }
+
+  if (action === "dice-chance") {
+    setDiceChance(Number(actionTarget.dataset.chance));
+    return;
+  }
+
+  if (action === "goal-bet") {
+    placeGoalBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "goal-start") {
+    startGoalRound();
+    return;
+  }
+
+  if (action === "goal-pick") {
+    pickGoalCell(Number(actionTarget.dataset.row), Number(actionTarget.dataset.col));
+    return;
+  }
+
+  if (action === "goal-cashout") {
+    cashOutGoal();
+    return;
+  }
+
+  if (action === "goal-clear") {
+    clearGoalBet();
+    return;
+  }
+
+  if (action === "goal-repeat") {
+    repeatGoalBet();
+    return;
+  }
+
+  if (action === "goal-size") {
+    setGoalSize(actionTarget.dataset.size);
+    return;
+  }
+
+  if (action === "keno-bet") {
+    placeKenoBet(state.selectedAmount);
+    return;
+  }
+
+  if (action === "keno-pick") {
+    toggleKenoPick(Number(actionTarget.dataset.number));
+    return;
+  }
+
+  if (action === "keno-draw") {
+    drawKenoRound();
+    return;
+  }
+
+  if (action === "keno-clear") {
+    clearKenoBet();
+    return;
+  }
+
+  if (action === "keno-repeat") {
+    repeatKenoBet();
+    return;
+  }
+
+  if (action === "keno-picks-clear") {
+    clearKenoPicks();
+    return;
+  }
+
   if (action === "minesweeper-reveal") {
     revealMinesweeperCell(Number(actionTarget.dataset.index));
     return;
@@ -749,6 +1137,18 @@ window.addEventListener("pointerup", (event) => {
       placePlinkoBet(amount);
     } else if (state.currentScreen === "crash") {
       placeCrashBet(amount);
+    } else if (state.currentScreen === "coinflip") {
+      placeCoinflipBet(dropBetId, amount);
+    } else if (state.currentScreen === "mines") {
+      placeCasinoMinesBet(amount);
+    } else if (state.currentScreen === "hotline") {
+      placeHotlineBet(dropBetId, amount);
+    } else if (state.currentScreen === "dice") {
+      placeDiceBet(amount);
+    } else if (state.currentScreen === "goal") {
+      placeGoalBet(amount);
+    } else if (state.currentScreen === "keno") {
+      placeKenoBet(amount);
     }
   } else {
     render();
@@ -818,6 +1218,45 @@ window.addEventListener("keydown", (event) => {
       scrollGameToTop();
       render();
     }
+    if (key === "q") {
+      event.preventDefault();
+      state.currentScreen = "coinflip";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "n") {
+      event.preventDefault();
+      resetCasinoMinesForExit(true);
+      state.currentScreen = "mines";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "l") {
+      event.preventDefault();
+      state.currentScreen = "hotline";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "d") {
+      event.preventDefault();
+      state.currentScreen = "dice";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "g") {
+      event.preventDefault();
+      resetGoalForExit(true);
+      state.currentScreen = "goal";
+      scrollGameToTop();
+      render();
+    }
+    if (key === "e") {
+      event.preventDefault();
+      resetKenoForExit(true);
+      state.currentScreen = "keno";
+      scrollGameToTop();
+      render();
+    }
     if (key === "m") {
       event.preventDefault();
       resetMinesweeper();
@@ -835,7 +1274,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "escape" || (key === "b" && !["slots", "baccarat", "bus", "plinko", "crash"].includes(state.currentScreen))) {
+  if (key === "escape" || (key === "b" && !["slots", "baccarat", "bus", "plinko", "crash", "coinflip", "mines", "hotline", "dice", "goal", "keno"].includes(state.currentScreen))) {
     event.preventDefault();
     resetCurrentTableForExit();
     state.currentScreen = "menu";
@@ -1035,6 +1474,143 @@ window.addEventListener("keydown", (event) => {
     }
     if (key === "r") {
       repeatCrashBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "coinflip") {
+    if (key >= "1" && key <= "6") {
+      state.selectedAmount = CHIP_VALUES[Number(key) - 1];
+      render();
+      return;
+    }
+    if (key === "h" || key === "t" || key === "s") {
+      placeCoinflipBet(key === "h" ? "heads" : key === "t" ? "tails" : "side", state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      flipCoin();
+      return;
+    }
+    if (key === "c") {
+      clearCoinflipBets();
+      return;
+    }
+    if (key === "r") {
+      repeatCoinflipBets();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "mines") {
+    if (key >= "1" && key <= "6") {
+      state.selectedAmount = CHIP_VALUES[Number(key) - 1];
+      render();
+      return;
+    }
+    if (key === "b") {
+      event.preventDefault();
+      placeCasinoMinesBet(state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      startCasinoMinesRound();
+      return;
+    }
+    if (key === "c") {
+      if (canCashOutCasinoMines()) cashOutCasinoMines();
+      else clearCasinoMinesBet();
+      return;
+    }
+    if (key === "r") {
+      repeatCasinoMinesBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "hotline") {
+    if (key >= "1" && key <= "6") {
+      state.selectedAmount = CHIP_VALUES[Number(key) - 1];
+      render();
+      return;
+    }
+    if (key === "k" || key === "r" || key === "y") {
+      placeHotlineBet(key === "k" ? "black" : key === "r" ? "red" : "yellow", state.selectedAmount);
+      return;
+    }
+    if (key === "h") {
+      toggleHotlineMode();
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      spinHotline();
+      return;
+    }
+    if (key === "c") {
+      clearHotlineBets();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "dice") {
+    if (key >= "1" && key <= "6") {
+      state.selectedAmount = CHIP_VALUES[Number(key) - 1];
+      render();
+      return;
+    }
+    if (key === "b") {
+      placeDiceBet(state.selectedAmount);
+      return;
+    }
+    if (key === "u" || key === "o") {
+      setDiceSide(key === "u" ? "under" : "over");
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      rollDiceRound();
+      return;
+    }
+    if (key === "c") {
+      clearDiceBet();
+      return;
+    }
+    if (key === "r") {
+      repeatDiceBet();
+      return;
+    }
+    return;
+  }
+
+  if (state.currentScreen === "goal") {
+    if (key >= "1" && key <= "6") {
+      state.selectedAmount = CHIP_VALUES[Number(key) - 1];
+      render();
+      return;
+    }
+    if (key === "b") {
+      placeGoalBet(state.selectedAmount);
+      return;
+    }
+    if (key === "enter" || key === " ") {
+      event.preventDefault();
+      startGoalRound();
+      return;
+    }
+    if (key === "c") {
+      if (canCashOutGoal()) cashOutGoal();
+      else clearGoalBet();
+      return;
+    }
+    if (key === "r") {
+      repeatGoalBet();
       return;
     }
     return;
@@ -1320,6 +1896,10 @@ function formatMoney(value) {
 }
 
 function formatChipValue(value) {
+  if (value >= 1000) {
+    const shortened = value / 1000;
+    return Number.isInteger(shortened) ? `${shortened}k` : `${shortened.toFixed(1).replace(".", ",")}k`;
+  }
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
@@ -1337,7 +1917,237 @@ function setXp(value, save = true) {
   if (save) queueWalletSave();
 }
 
+function checkDailyQuests() {
+  const now = new Date();
+  const dateString = now.toDateString();
+  const savedQuests = localStorage.getItem("gamblers_quests");
+
+  if (savedQuests) {
+    const parsed = JSON.parse(savedQuests);
+    if (parsed.date === dateString) {
+      state.quests = parsed.quests;
+      state.questProgress = parsed.progress;
+      state.lastQuestDate = parsed.date;
+      return;
+    }
+  }
+
+  generateDailyQuests(dateString);
+}
+
+function generateDailyQuests(dateString) {
+  const quests = [];
+  const bettablePool = [...BETTABLE_GAMES];
+  const allPool = [...ALL_GAMES];
+
+  // Quest 1: Random Game Play
+  const playIdx = Math.floor(Math.random() * allPool.length);
+  const playGame = allPool.splice(playIdx, 1)[0];
+  const playAmount = GAME_PLAY_AMOUNTS[playGame] || 20;
+
+  quests.push({
+    id: "q1",
+    type: "play_specific",
+    game: playGame,
+    target: playAmount,
+    rewardMoney: QUEST_GEN_DATA.play_specific.rewardMoney,
+    rewardXp: QUEST_GEN_DATA.play_specific.rewardXp,
+    label: `Play ${playAmount} rounds of ${gameLabel(playGame)}`
+  });
+
+  // Quest 2: Random Game Bet
+  // Remove playGame from bettablePool if it was picked
+  const bettableCleanPool = bettablePool.filter(g => g !== playGame);
+  const betIdx = Math.floor(Math.random() * bettableCleanPool.length);
+  const betGame = bettableCleanPool[betIdx];
+  const betAmount = QUEST_GEN_DATA.bet_specific.amount;
+
+  quests.push({
+    id: "q2",
+    type: "bet_specific",
+    game: betGame,
+    target: betAmount,
+    rewardMoney: QUEST_GEN_DATA.bet_specific.rewardMoney,
+    rewardXp: QUEST_GEN_DATA.bet_specific.rewardXp,
+    label: `Bet $${formatMoney(betAmount)} on ${gameLabel(betGame)}`
+  });
+
+  // Quest 3: Total Games Play
+  quests.push({
+    id: "q3",
+    type: "play_total",
+    target: QUEST_GEN_DATA.play_total.amount,
+    rewardMoney: QUEST_GEN_DATA.play_total.rewardMoney,
+    rewardXp: QUEST_GEN_DATA.play_total.rewardXp,
+    label: `Play ${QUEST_GEN_DATA.play_total.amount} rounds total`
+  });
+
+  // Quest 4: Total Games Bet
+  quests.push({
+    id: "q4",
+    type: "bet_total",
+    target: QUEST_GEN_DATA.bet_total.amount,
+    rewardMoney: QUEST_GEN_DATA.bet_total.rewardMoney,
+    rewardXp: QUEST_GEN_DATA.bet_total.rewardXp,
+    label: `Bet $${formatMoney(QUEST_GEN_DATA.bet_total.amount)} total`
+  });
+
+  state.quests = quests;
+  state.questProgress = {
+    plays: {},
+    bets: {},
+    totalPlays: 0,
+    totalBets: 0,
+    completed: []
+  };
+  state.lastQuestDate = dateString;
+  saveQuests();
+}
+
+function saveQuests() {
+  localStorage.setItem("gamblers_quests", JSON.stringify({
+    date: state.lastQuestDate,
+    quests: state.quests,
+    progress: state.questProgress
+  }));
+}
+
+function gameLabel(id) {
+  if (id === "joku") return "JØKU";
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+function trackQuestPlay(gameId) {
+  const progress = state.questProgress;
+  const gameKey = gameId.toLowerCase();
+  progress.plays[gameKey] = (progress.plays[gameKey] || 0) + 1;
+  progress.totalPlays = (progress.totalPlays || 0) + 1;
+  checkQuestCompletion();
+  saveQuests();
+}
+
+function trackQuestBet(gameId, amount) {
+  const progress = state.questProgress;
+  const gameKey = gameId.toLowerCase();
+  const betAmount = sanitizeMoney(amount);
+  progress.bets[gameKey] = (progress.bets[gameKey] || 0) + betAmount;
+  progress.totalBets = (progress.totalBets || 0) + betAmount;
+  checkQuestCompletion();
+  saveQuests();
+}
+
+function checkQuestCompletion() {
+  const progress = state.questProgress;
+
+  for (const quest of state.quests) {
+    if (progress.completed.includes(quest.id)) continue;
+
+    let current = 0;
+    if (quest.type === "play_specific") {
+      current = progress.plays[quest.game.toLowerCase()] || 0;
+    } else if (quest.type === "bet_specific") {
+      current = progress.bets[quest.game.toLowerCase()] || 0;
+    } else if (quest.type === "play_total") {
+      current = progress.totalPlays || 0;
+    } else if (quest.type === "bet_total") {
+      current = progress.totalBets || 0;
+    }
+
+    if (current >= quest.target) {
+      completeQuest(quest);
+    }
+  }
+}
+
+function completeQuest(quest) {
+  state.questProgress.completed.push(quest.id);
+  adjustWallet(quest.rewardMoney);
+  awardQuestXp(quest.rewardXp, quest.label);
+  saveQuests();
+  render();
+}
+
+function awardQuestXp(xp, questLabel) {
+  const beforeLevel = getLevelProgress(state.xp).level;
+  setXp(state.xp + xp);
+  touchPlayerPresence();
+  const afterLevel = getLevelProgress(state.xp).level;
+
+  const msg = `Quest Complete: ${questLabel}! +$${formatMoney(state.quests.find(q => q.label === questLabel).rewardMoney)} & ${xp} XP`;
+
+  if (afterLevel > beforeLevel) {
+    state.spinMessage = `Level ${afterLevel} reached.`;
+    setAuthMessage(`Level ${afterLevel} reached. ${msg}`);
+  } else {
+    setAuthMessage(msg);
+  }
+
+  openPopupWithDelay({
+    tone: "win",
+    title: "Quest Completed",
+    detail: msg,
+    buttonLabel: "Awesome",
+  }, 100);
+}
+
+function renderQuests() {
+  if (!state.quests.length) return "";
+
+  return `
+    <section class="leaderboard-card quest-card">
+      <div class="leaderboard-card-head">
+        <div>
+          <p class="menu-eyebrow">Daily Challenges</p>
+          <h3>Active Quests</h3>
+        </div>
+      </div>
+      <p class="leaderboard-description">Complete these tasks to earn extra rewards.</p>
+      <div class="quest-list">
+        ${state.quests.map(quest => renderQuestItem(quest)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderQuestItem(quest) {
+  const progress = state.questProgress;
+  const isCompleted = progress.completed.includes(quest.id);
+
+  let current = 0;
+  if (quest.type === "play_specific") {
+    current = progress.plays[quest.game.toLowerCase()] || 0;
+  } else if (quest.type === "bet_specific") {
+    current = progress.bets[quest.game.toLowerCase()] || 0;
+  } else if (quest.type === "play_total") {
+    current = progress.totalPlays || 0;
+  } else if (quest.type === "bet_total") {
+    current = progress.totalBets || 0;
+  }
+
+  const percent = Math.min(100, Math.round((current / quest.target) * 100));
+  const isMoney = quest.type === "bet_specific" || quest.type === "bet_total";
+
+  const currentStr = isMoney ? `$${formatMoney(current)}` : current;
+  const targetStr = isMoney ? `$${formatMoney(quest.target)}` : quest.target;
+
+  return `
+    <div class="quest-item ${isCompleted ? "completed" : ""}">
+      <div class="quest-head">
+        <p class="quest-title">${escapeHtml(quest.label)}</p>
+        <span class="quest-reward">+$${formatMoney(quest.rewardMoney)} | ${quest.rewardXp} XP</span>
+      </div>
+      <div class="quest-progress-wrap">
+        <div class="quest-progress-bar">
+          <div class="quest-progress-fill" style="width: ${percent}%"></div>
+        </div>
+        <div class="quest-progress-text">${currentStr} / ${targetStr}</div>
+      </div>
+    </div>
+  `;
+}
+
 function awardRoundXp(gameName) {
+  trackQuestPlay(gameName);
   const beforeLevel = getLevelProgress(state.xp).level;
   setXp(state.xp + XP_PER_ROUND);
   touchPlayerPresence();
@@ -1349,6 +2159,7 @@ function awardRoundXp(gameName) {
   }
   setAuthMessage(`${gameName} round complete. +${XP_PER_ROUND} XP`);
 }
+
 
 function getLevelProgress(totalXp) {
   let level = 1;
@@ -1371,6 +2182,34 @@ function getLevelProgress(totalXp) {
     neededXp: nextCost,
     percent: Math.min(100, Math.round((remaining / nextCost) * 100)),
   };
+}
+
+function getRankInfo(level) {
+  const tierIndex = Math.max(0, Math.floor((Math.max(1, level) - 1) / 5));
+  const name = RANK_TIERS[Math.min(tierIndex, RANK_TIERS.length - 1)];
+  const nextMilestone = (tierIndex + 1) * 5 + 1;
+  return {
+    name,
+    tierIndex,
+    nextMilestone: nextMilestone <= (RANK_TIERS.length * 5) ? nextMilestone : null,
+  };
+}
+
+function loadThemePreference() {
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  return savedTheme === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme) {
+  document.body.dataset.theme = theme;
+}
+
+function setTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  menuState.theme = nextTheme;
+  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  applyTheme(nextTheme);
+  if (state.currentScreen === "menu" || menuState.settingsOpen) render();
 }
 
 function hasSupabase() {
@@ -1564,6 +2403,7 @@ async function initializeAuth() {
 
   setAuthMessage("Log in or sign up to sync your wallet.");
   renderAuthPanel();
+  checkDailyQuests();
   refreshLeaderboards(true);
 }
 
@@ -1777,6 +2617,18 @@ function resetCurrentTableForExit() {
     resetPlinkoForExit(true);
   } else if (state.currentScreen === "crash") {
     resetCrashForExit(true);
+  } else if (state.currentScreen === "coinflip") {
+    resetCoinflipForExit(true);
+  } else if (state.currentScreen === "mines") {
+    resetCasinoMinesForExit(true);
+  } else if (state.currentScreen === "hotline") {
+    resetHotlineForExit(true);
+  } else if (state.currentScreen === "dice") {
+    resetDiceForExit(true);
+  } else if (state.currentScreen === "goal") {
+    resetGoalForExit(true);
+  } else if (state.currentScreen === "keno") {
+    resetKenoForExit(true);
   } else if (state.currentScreen === "yahtzee") {
     resetYahtzeeForNewGame();
   }
@@ -1791,6 +2643,18 @@ function resetCurrentTableAfterPopup() {
     preparePlinkoNextRound();
   } else if (state.currentScreen === "crash" && state.crash.result) {
     prepareCrashNextRound();
+  } else if (state.currentScreen === "coinflip" && state.coinflip.result) {
+    prepareCoinflipNextRound();
+  } else if (state.currentScreen === "mines" && state.mines.result) {
+    prepareCasinoMinesNextRound();
+  } else if (state.currentScreen === "hotline" && state.hotline.result) {
+    prepareHotlineNextRound();
+  } else if (state.currentScreen === "dice" && state.dice.result) {
+    prepareDiceNextRound();
+  } else if (state.currentScreen === "goal" && state.goal.result) {
+    prepareGoalNextRound();
+  } else if (state.currentScreen === "keno" && state.keno.result) {
+    prepareKenoNextRound();
   } else if (state.currentScreen === "minesweeper" && state.minesweeper.result) {
     if (state.minesweeper.phase !== "playing" && state.minesweeper.phase !== "won") resetMinesweeper();
   } else if (state.currentScreen === "yahtzee" && isYahtzeeGameOver()) {
@@ -1922,8 +2786,10 @@ function spinWheel() {
   }
 
   const totalStaked = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
-  const net = payout - totalStaked;
+  const net = Math.round((payout - totalStaked) * 100) / 100;
+
   adjustWallet(payout);
+  trackQuestBet("Roulette", totalStaked);
   awardRoundXp("Roulette");
 
   state.lastSpin = {
@@ -2023,10 +2889,13 @@ function chipClassForValue(value) {
 
 function render() {
   const progress = getLevelProgress(state.xp);
+  const rank = getRankInfo(progress.level);
   walletBalance.textContent = `$${formatMoney(state.wallet)}`;
   playerLevel.textContent = String(progress.level);
+  playerRank.textContent = rank.name;
   playerXp.textContent = `${progress.progressXp} / ${progress.neededXp} XP`;
   xpFill.style.width = `${progress.percent}%`;
+  applyTheme(menuState.theme);
   renderAuthPanel();
   let screenHtml = "";
   if (state.currentScreen === "menu") {
@@ -2045,6 +2914,18 @@ function render() {
     screenHtml = renderPlinko();
   } else if (state.currentScreen === "crash") {
     screenHtml = renderCrash();
+  } else if (state.currentScreen === "coinflip") {
+    screenHtml = renderCoinflip();
+  } else if (state.currentScreen === "mines") {
+    screenHtml = renderCasinoMines();
+  } else if (state.currentScreen === "hotline") {
+    screenHtml = renderHotline();
+  } else if (state.currentScreen === "dice") {
+    screenHtml = renderDice();
+  } else if (state.currentScreen === "goal") {
+    screenHtml = renderGoal();
+  } else if (state.currentScreen === "keno") {
+    screenHtml = renderKeno();
   } else if (state.currentScreen === "minesweeper") {
     screenHtml = renderMinesweeper();
   } else if (state.currentScreen === "yahtzee") {
@@ -2129,7 +3010,7 @@ function renderLeaderboardEntry(entry, rank, type) {
 }
 
 function renderSettingsOverlay() {
-  if (!menuState.settingsOpen || !authState.account) return "";
+  if (!menuState.settingsOpen) return "";
 
   return `
     <div class="settings-modal-shell">
@@ -2138,27 +3019,35 @@ function renderSettingsOverlay() {
         <div class="settings-head">
           <div>
             <p class="menu-eyebrow">Settings</p>
-            <h2>Account settings</h2>
+            <h2>Room settings</h2>
           </div>
           <button class="pill-button" data-action="close-settings">Close</button>
         </div>
-        <p class="settings-copy">Update your username, change your password, delete the account, or decide whether your profile appears on the leaderboards.</p>
-        <label class="settings-field">
-          <span>Username</span>
-          <input id="settings-username" type="text" value="${escapeAttribute(authState.account.username)}" maxlength="20">
-        </label>
-        <label class="settings-field">
-          <span>New password</span>
-          <input id="settings-password" type="password" placeholder="Leave blank to keep the current one.">
-        </label>
+        <p class="settings-copy">Switch the room between dark and light mode. If you're signed in, you can also manage your account details here.</p>
         <label class="settings-toggle">
-          <input id="settings-public-toggle" type="checkbox" ${authState.account.isPublic ? "checked" : ""}>
-          <span>Show this account on the public leaderboards</span>
+          <input id="settings-theme-toggle" type="checkbox" ${menuState.theme === "light" ? "checked" : ""}>
+          <span>Light mode</span>
         </label>
-        <div class="settings-actions">
-          <button class="action-button accent" data-action="save-settings">Save settings</button>
-          <button class="action-button danger" data-action="delete-account">Delete account</button>
-        </div>
+        ${authState.account ? `
+          <label class="settings-field">
+            <span>Username</span>
+            <input id="settings-username" type="text" value="${escapeAttribute(authState.account.username)}" maxlength="20">
+          </label>
+          <label class="settings-field">
+            <span>New password</span>
+            <input id="settings-password" type="password" placeholder="Leave blank to keep the current one.">
+          </label>
+          <label class="settings-toggle">
+            <input id="settings-public-toggle" type="checkbox" ${authState.account.isPublic ? "checked" : ""}>
+            <span>Show this account on the public leaderboards</span>
+          </label>
+          <div class="settings-actions">
+            <button class="action-button accent" data-action="save-settings">Save settings</button>
+            <button class="action-button danger" data-action="delete-account">Delete account</button>
+          </div>
+        ` : `
+          <p class="settings-note">Sign in if you want to rename your profile, change your password, or manage leaderboard visibility.</p>
+        `}
       </section>
     </div>
   `;
@@ -2253,6 +3142,68 @@ function renderMenu() {
               <p>Launch the round, watch the multiplier climb, and cash out before the flight breaks.</p>
             </div>
           </button>
+          <button class="game-card" data-action="open-coinflip">
+            <div class="coinflip-menu-art">
+              <div class="menu-coin">SIDE</div>
+              <strong>30x</strong>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Coinflip</h3>
+              <p>Flip heads or tails, or call the rare 3% side for a sharp 30x hit.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-mines">
+            <div class="casino-mines-menu-art">
+              ${Array.from({ length: 25 }, (_, index) => `<span class="${index === 8 || index === 18 ? "bomb" : index % 3 === 0 ? "gem" : ""}"></span>`).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Mines</h3>
+              <p>Stake a round, open safe tiles, and take the rising cash-out before a mine appears.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-hotline">
+            <div class="hotline-menu-art">
+              ${["black", "red", "black", "yellow", "red"].map((color) => `<span class="${color}"></span>`).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Hotline</h3>
+              <p>Bet red, black, or the one yellow card while a case-style strip tears past the marker.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-dice">
+            <div class="dice-menu-art">
+              <span>26</span>
+              <strong>UNDER</strong>
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Dice</h3>
+              <p>Choose over or under, set the win chance, and roll for a matched payout.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-goal">
+            <div class="goal-menu-art">
+              ${Array.from({ length: 12 }, (_, index) => `<span class="${index === 4 || index === 9 ? "mine" : index === 0 ? "ball" : ""}"></span>`).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Goal</h3>
+              <p>Send the ball right through columns with one hidden mine in every lane wall.</p>
+            </div>
+          </button>
+          <button class="game-card" data-action="open-keno">
+            <div class="keno-menu-art">
+              ${Array.from({ length: KENO_ROWS * KENO_COLS }, (_, index) => `<span class="${[1, 8, 14, 22, 31].includes(index) ? "picked" : [3, 17, 27, 34].includes(index) ? "drawn" : ""}">${index + 1}</span>`).join("")}
+            </div>
+            <div class="game-card-copy">
+              <p class="game-tag">Live now</p>
+              <h3>Keno</h3>
+              <p>Pick five spots on a 6x6 field while ten winning numbers chase the hits.</p>
+            </div>
+          </button>
           <button class="game-card" data-action="open-minesweeper">
             <div class="mines-menu-art">
               ${Array.from({ length: 25 }, (_, index) => `<span class="${index === 7 ? "mine" : index % 4 === 0 ? "open" : ""}">${index === 7 ? "*" : index % 4 === 0 ? "1" : ""}</span>`).join("")}
@@ -2294,14 +3245,15 @@ function renderMenu() {
           <h2>Leaderboards</h2>
           <p class="menu-copy">Public profiles show up here. The lists refresh when players come back to the menu.</p>
         </div>
+        ${renderQuests()}
         ${renderMenuLeaderboards()}
         <div class="menu-settings-card">
           <div>
             <p class="game-tag">Account</p>
             <strong>${authState.account ? "Settings ready" : "Sign in first"}</strong>
           </div>
-          <p class="menu-note">${authState.account ? "Change your username or password, delete the account, or hide from the leaderboards." : "Log in or sign up to save progress and manage visibility."}</p>
-          ${authState.account ? '<button class="action-button accent" data-action="open-settings">Open settings</button>' : ""}
+          <p class="menu-note">${authState.account ? "Change your username, switch themes, delete the account, or hide from the leaderboards." : "Open settings for light mode now, or sign in to save progress and manage profile visibility."}</p>
+          <button class="action-button accent" data-action="open-settings">Open settings</button>
         </div>
         <div class="menu-note">${escapeHtml(currentMenuNote())}</div>
       </aside>
@@ -2718,6 +3670,12 @@ function currentMenuNote() {
   if (state.bus.result) return state.bus.result.detail;
   if (state.plinko.result) return state.plinko.message;
   if (state.crash.result) return state.crash.message;
+  if (state.coinflip.result) return state.coinflip.message;
+  if (state.mines.result) return state.mines.message;
+  if (state.hotline.result) return state.hotline.message;
+  if (state.dice.result) return state.dice.message;
+  if (state.goal.result) return state.goal.message;
+  if (state.keno.result) return state.keno.message;
   if (state.minesweeper.result) return state.minesweeper.message;
   if (state.joku.result) return state.joku.message;
   if (state.blackjack.result) return state.blackjack.result.detail;
@@ -2853,7 +3811,8 @@ function playJokuHand() {
   const result = evaluateJokuHand(hand);
 
   adjustWallet(result.reward);
-  awardRoundXp("JØKU");
+  trackQuestBet("Joku", 0); // Joku is usually free or 0 wager in this version
+  awardRoundXp("Joku");
   joku.result = result;
   joku.message = `${result.rank}. +$${formatMoney(result.reward)}`;
 
@@ -3209,6 +4168,12 @@ function formatMultiplier(value) {
   return `${Number(value).toFixed(2).replace(/\.?0+$/, "")}x`;
 }
 
+function netResultDetail(net) {
+  if (net > 0) return `Won $${formatMoney(net)}`;
+  if (net < 0) return `Lost $${formatMoney(Math.abs(net))}`;
+  return "Bet returned.";
+}
+
 function canDropPlinko() {
   const plinko = state.plinko;
   return plinko.phase === "betting" && plinko.wager > 0;
@@ -3309,10 +4274,14 @@ function dropPlinkoBall() {
 }
 
 function buildPlinkoPath() {
-  let slot = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  const center = Math.floor(PLINKO_MULTIPLIERS.length / 2);
+  const lowMiddleSlot = Math.random() < 0.5 ? center - 1 : center + 1;
+  let slot = center;
   const path = [];
   for (let row = 0; row < PLINKO_ROWS; row += 1) {
-    const drift = Math.random() < 0.5 ? -1 : 1;
+    const randomDrift = Math.random() < 0.5 ? -1 : 1;
+    const inwardDrift = Math.sign(lowMiddleSlot - slot);
+    const drift = inwardDrift && Math.random() < 0.34 ? inwardDrift : randomDrift;
     slot = Math.max(0, Math.min(PLINKO_MULTIPLIERS.length - 1, slot + drift));
     path.push(slot);
   }
@@ -3364,6 +4333,7 @@ function finishPlinkoDrop() {
   const payout = Math.round(plinko.wager * multiplier * 100) / 100;
   const net = Math.round((payout - plinko.wager) * 100) / 100;
   if (payout > 0) adjustWallet(payout);
+  trackQuestBet("Plinko", plinko.lastWager);
   awardRoundXp("Plinko");
   plinko.phase = "betting";
   plinko.currentRow = PLINKO_ROWS - 1;
@@ -3504,9 +4474,16 @@ function startCrashRound() {
 }
 
 function randomCrashPoint() {
-  const roll = Math.max(0.01, Math.random());
-  const raw = CRASH_HOUSE_RETURN / roll;
-  return Math.max(MIN_CRASH_POINT, Math.min(25, Math.round(raw * 100) / 100));
+  const band = Math.random();
+  if (band < 0.1) return randomCrashPointBetween(0.9, 0.99);
+  if (band < 0.6) return randomCrashPointBetween(1.01, 1.99);
+  if (band < 0.92) return randomCrashPointBetween(2, 4.99);
+  if (band < 0.99) return randomCrashPointBetween(5, 11.99);
+  return randomCrashPointBetween(12, 25);
+}
+
+function randomCrashPointBetween(min, max) {
+  return Math.round((min + Math.random() * (max - min)) * 100) / 100;
 }
 
 function scheduleCrashTick() {
@@ -3515,7 +4492,7 @@ function scheduleCrashTick() {
   scheduleUiTask(() => {
     if (!isCrashFlying()) return;
     const climb = crash.multiplier < 1
-      ? 0.08
+      ? 0.05
       : CRASH_GROWTH_PER_TICK * Math.max(1, crash.multiplier * 0.55);
     crash.multiplier = Math.round((crash.multiplier + climb) * 100) / 100;
     if (crash.multiplier >= crash.crashPoint) {
@@ -3534,29 +4511,57 @@ function scheduleCrashTick() {
 
 function cashOutCrash() {
   const crash = state.crash;
-  if (crash.phase !== "flying") return;
+  if (!canCashOutCrash()) {
+    if (crash.phase === "flying" && crash.multiplier < MIN_CRASH_CASHOUT) {
+      crash.message = `Cash out unlocks at ${formatMultiplier(MIN_CRASH_CASHOUT)}.`;
+      render();
+    }
+    return;
+  }
   crash.phase = "landing";
   crash.cashoutCountdownMs = CRASH_CASHOUT_COUNTDOWN_MS;
-  crash.message = "Cash out landing in 1 second.";
+  crash.message = `Cash out landing in ${formatCountdown(CRASH_CASHOUT_COUNTDOWN_MS)} seconds.`;
   state.pendingReveal = {
     game: "crash",
     title: "Landing",
-    detail: "Cash out in 1 second.",
+    detail: `Cash out in ${formatCountdown(CRASH_CASHOUT_COUNTDOWN_MS)} seconds.`,
   };
   render();
-  scheduleCrashCashoutCountdown();
+  scheduleCrashCashoutCountdown(CRASH_CASHOUT_COUNTDOWN_MS);
+}
+
+function canCashOutCrash() {
+  const crash = state.crash;
+  return crash.phase === "flying" && crash.multiplier >= MIN_CRASH_CASHOUT;
 }
 
 function isCrashFlying() {
   return state.crash.phase === "flying" || state.crash.phase === "landing";
 }
 
-function scheduleCrashCashoutCountdown() {
+function scheduleCrashCashoutCountdown(remainingMs) {
   scheduleUiTask(() => {
     const crash = state.crash;
     if (crash.phase !== "landing") return;
-    settleCrashCashout();
-  }, CRASH_CASHOUT_COUNTDOWN_MS);
+    const nextRemaining = Math.max(0, remainingMs - CRASH_CASHOUT_COUNTDOWN_STEP_MS);
+    crash.cashoutCountdownMs = nextRemaining;
+    if (nextRemaining <= 0) {
+      settleCrashCashout();
+      return;
+    }
+    crash.message = `Cash out landing in ${formatCountdown(nextRemaining)} seconds.`;
+    state.pendingReveal = {
+      game: "crash",
+      title: "Landing",
+      detail: `Cash out in ${formatCountdown(nextRemaining)} seconds.`,
+    };
+    render();
+    scheduleCrashCashoutCountdown(nextRemaining);
+  }, Math.min(CRASH_CASHOUT_COUNTDOWN_STEP_MS, remainingMs));
+}
+
+function formatCountdown(ms) {
+  return (Math.max(0, ms) / 1000).toFixed(2);
 }
 
 function settleCrashCashout() {
@@ -3565,6 +4570,7 @@ function settleCrashCashout() {
   const payout = Math.round(crash.wager * crash.multiplier * 100) / 100;
   const net = Math.round((payout - crash.wager) * 100) / 100;
   adjustWallet(payout);
+  trackQuestBet("Crash", crash.lastWager);
   awardRoundXp("Crash");
   crash.phase = "betting";
   crash.cashedOutAt = crash.multiplier;
@@ -3592,6 +4598,7 @@ function settleCrashCashout() {
 
 function finishCrashLoss() {
   const crash = state.crash;
+  trackQuestBet("Crash", crash.lastWager);
   awardRoundXp("Crash");
   crash.phase = "betting";
   crash.multiplier = crash.crashPoint;
@@ -3635,6 +4642,1085 @@ function resetCrashForExit(refundWager = false) {
   crash.wagerChips = [];
   crash.message = "Place a wager and launch.";
   prepareCrashNextRound();
+}
+
+function emptySideBets(sides) {
+  return Object.fromEntries(sides.map((side) => [side, 0]));
+}
+
+function emptySideChips(sides) {
+  return Object.fromEntries(sides.map((side) => [side, []]));
+}
+
+function cloneSideChips(chips, sides) {
+  return Object.fromEntries(sides.map((side) => [side, [...(chips[side] || [])]]));
+}
+
+function totalSideBets(bets, sides) {
+  return sides.reduce((total, side) => total + (bets[side] || 0), 0);
+}
+
+function normalizeCoinflipSide(side) {
+  const clean = String(side || "").replace(/^coinflip-/, "");
+  return ["heads", "tails", "side"].includes(clean) ? clean : null;
+}
+
+function totalCoinflipBets() {
+  return totalSideBets(state.coinflip.bets, ["heads", "tails", "side"]);
+}
+
+function canFlipCoin() {
+  return state.coinflip.phase === "betting" && totalCoinflipBets() > 0;
+}
+
+function canRepeatCoinflip() {
+  return state.coinflip.phase === "betting" && totalSideBets(state.coinflip.lastBets, ["heads", "tails", "side"]) > 0;
+}
+
+function placeCoinflipBet(side, amount) {
+  const betSide = normalizeCoinflipSide(side);
+  const coin = state.coinflip;
+  if (!betSide || coin.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("coinflip", totalCoinflipBets(), chip)) {
+    coin.message = maxBetMessage("coinflip");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    coin.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareCoinflipNextRound();
+  adjustWallet(-chip);
+  coin.bets[betSide] += chip;
+  coin.betChips[betSide].push(chip);
+  coin.message = `${betSide[0].toUpperCase() + betSide.slice(1)} bet $${formatMoney(coin.bets[betSide])}`;
+  state.selectedAmount = chip;
+  render();
+}
+
+function clearCoinflipBets() {
+  const coin = state.coinflip;
+  if (coin.phase !== "betting" || !totalCoinflipBets()) return;
+  adjustWallet(totalCoinflipBets());
+  coin.bets = emptySideBets(["heads", "tails", "side"]);
+  coin.betChips = emptySideChips(["heads", "tails", "side"]);
+  coin.message = "Bets cleared.";
+  render();
+}
+
+function repeatCoinflipBets() {
+  const coin = state.coinflip;
+  if (!canRepeatCoinflip()) return;
+  const sides = ["heads", "tails", "side"];
+  const total = totalSideBets(coin.lastBets, sides);
+  if (total > MAX_BETS.coinflip) {
+    coin.message = maxBetMessage("coinflip");
+    render();
+    return;
+  }
+  if (total > state.wallet) {
+    coin.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareCoinflipNextRound();
+  adjustWallet(-total);
+  coin.bets = { ...coin.lastBets };
+  coin.betChips = Object.fromEntries(sides.map((side) => [side, buildChipListForAmount(coin.lastBets[side] || 0)]));
+  coin.message = "Repeat bets ready.";
+  render();
+}
+
+function flipCoin() {
+  const coin = state.coinflip;
+  if (!canFlipCoin()) return;
+  const roll = Math.random();
+  const outcome = roll < COINFLIP_SIDE_CHANCE ? "side" : roll < COINFLIP_SIDE_CHANCE + (1 - COINFLIP_SIDE_CHANCE) / 2 ? "heads" : "tails";
+  coin.phase = "flipping";
+  coin.lastBets = { ...coin.bets };
+  coin.result = null;
+  coin.message = "Coin in the air.";
+  state.popup = null;
+  state.pendingReveal = { game: "coinflip", title: "Flipping", detail: "The coin is turning." };
+  render();
+  scheduleUiTask(() => settleCoinflip(outcome), 1250);
+}
+
+function settleCoinflip(outcome) {
+  const coin = state.coinflip;
+  if (coin.phase !== "flipping") return;
+  const staked = totalCoinflipBets();
+  const payout = Math.round((coin.bets[outcome] || 0) * COINFLIP_PAYOUTS[outcome] * 100) / 100;
+  const net = Math.round((payout - staked) * 100) / 100;
+  if (payout) adjustWallet(payout);
+  trackQuestBet("Coinflip", staked);
+  awardRoundXp("Coinflip");
+  coin.phase = "betting";
+  coin.face = outcome;
+  coin.result = {
+    outcome: outcome.toUpperCase(),
+    payout,
+    net,
+    detail: netResultDetail(net),
+  };
+  coin.message = coin.result.detail;
+  coin.bets = emptySideBets(["heads", "tails", "side"]);
+  coin.betChips = emptySideChips(["heads", "tails", "side"]);
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+    title: `${outcome.toUpperCase()} Coin`,
+    detail: coin.result.detail,
+    buttonLabel: "Flip Again",
+  }, 160);
+}
+
+function prepareCoinflipNextRound() {
+  state.coinflip.result = null;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetCoinflipForExit(refundBets = false) {
+  const coin = state.coinflip;
+  if (refundBets && coin.phase === "betting") adjustWallet(totalCoinflipBets());
+  coin.phase = "betting";
+  coin.bets = emptySideBets(["heads", "tails", "side"]);
+  coin.betChips = emptySideChips(["heads", "tails", "side"]);
+  coin.message = "Bet heads, tails, or the 3% side.";
+  prepareCoinflipNextRound();
+}
+
+function casinoMinesBlankBoard() {
+  return Array.from({ length: CASINO_MINES_ROWS * CASINO_MINES_COLS }, () => ({ mine: false, revealed: false }));
+}
+
+function casinoMinesVisibleBoard() {
+  return state.mines.board.length ? state.mines.board : casinoMinesBlankBoard();
+}
+
+function canStartCasinoMines() {
+  return state.mines.phase === "betting" && state.mines.wager > 0;
+}
+
+function canRepeatCasinoMines() {
+  return state.mines.phase === "betting" && state.mines.lastWager > 0;
+}
+
+function canCashOutCasinoMines() {
+  return state.mines.phase === "playing" && state.mines.safePicks > 0;
+}
+
+function placeCasinoMinesBet(amount) {
+  const mines = state.mines;
+  if (mines.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("mines", mines.wager, chip)) {
+    mines.message = maxBetMessage("mines");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    mines.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareCasinoMinesNextRound();
+  adjustWallet(-chip);
+  mines.wager += chip;
+  mines.wagerChips.push(chip);
+  mines.message = `Bet $${formatMoney(mines.wager)}.`;
+  state.selectedAmount = chip;
+  render();
+}
+
+function clearCasinoMinesBet() {
+  const mines = state.mines;
+  if (mines.phase !== "betting" || !mines.wager) return;
+  adjustWallet(mines.wager);
+  mines.wager = 0;
+  mines.wagerChips = [];
+  mines.message = "Bet cleared.";
+  render();
+}
+
+function repeatCasinoMinesBet() {
+  const mines = state.mines;
+  if (!canRepeatCasinoMines()) return;
+  if (mines.lastWager > MAX_BETS.mines) {
+    mines.message = maxBetMessage("mines");
+    render();
+    return;
+  }
+  if (mines.lastWager > state.wallet) {
+    mines.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareCasinoMinesNextRound();
+  adjustWallet(-mines.lastWager);
+  mines.wager = mines.lastWager;
+  mines.wagerChips = buildChipListForAmount(mines.lastWager);
+  mines.message = `Bet $${formatMoney(mines.wager)}.`;
+  render();
+}
+
+function startCasinoMinesRound() {
+  const mines = state.mines;
+  if (!canStartCasinoMines()) return;
+  mines.phase = "playing";
+  mines.lastWager = mines.wager;
+  mines.board = casinoMinesBlankBoard();
+  let placed = 0;
+  while (placed < CASINO_MINES_COUNT) {
+    const index = Math.floor(Math.random() * mines.board.length);
+    if (mines.board[index].mine) continue;
+    mines.board[index].mine = true;
+    placed += 1;
+  }
+  mines.safePicks = 0;
+  mines.multiplier = 1;
+  mines.result = null;
+  mines.message = "Choose a tile or cash out after a safe pick.";
+  state.popup = null;
+  state.pendingReveal = null;
+  render();
+}
+
+function revealCasinoMine(index) {
+  const mines = state.mines;
+  const cell = mines.board[index];
+  if (mines.phase !== "playing" || !cell || cell.revealed) return;
+  cell.revealed = true;
+  if (cell.mine) {
+    mines.board.forEach((boardCell) => {
+      if (boardCell.mine) boardCell.revealed = true;
+    });
+    finishCasinoMinesLoss();
+    return;
+  }
+  mines.safePicks += 1;
+  mines.multiplier = casinoMinesMultiplier(mines.safePicks);
+  mines.message = `${formatMultiplier(mines.multiplier)} ready. Cash out or pick again.`;
+  render();
+}
+
+function casinoMinesMultiplier(safePicks) {
+  let fair = 1;
+  const total = CASINO_MINES_ROWS * CASINO_MINES_COLS;
+  const safe = total - CASINO_MINES_PAYOUT_CURVE_MINES;
+  for (let pick = 0; pick < safePicks; pick += 1) {
+    fair *= (total - pick) / (safe - pick);
+  }
+  return Math.round(fair * CASINO_MINES_EDGE * 100) / 100;
+}
+
+function cashOutCasinoMines() {
+  const mines = state.mines;
+  if (!canCashOutCasinoMines()) return;
+  const payout = Math.round(mines.wager * mines.multiplier * 100) / 100;
+  const net = Math.round((payout - mines.wager) * 100) / 100;
+  adjustWallet(payout);
+  trackQuestBet("Mines", mines.lastWager);
+  awardRoundXp("Mines");
+  mines.phase = "betting";
+  mines.board.forEach((cell) => {
+    if (cell.mine) cell.revealed = true;
+  });
+  mines.result = {
+    title: `Cashed ${formatMultiplier(mines.multiplier)}`,
+    detail: net > 0 ? `Won $${formatMoney(net)}` : `Lost $${formatMoney(Math.abs(net))}`,
+    payout,
+    net,
+  };
+  mines.message = mines.result.detail;
+  mines.wager = 0;
+  mines.wagerChips = [];
+  render();
+  openPopupWithDelay({ tone: net > 0 ? "win" : "loss", title: mines.result.title, detail: mines.result.detail, buttonLabel: "Play Again" }, 160);
+}
+
+function finishCasinoMinesLoss() {
+  const mines = state.mines;
+  trackQuestBet("Mines", mines.lastWager);
+  awardRoundXp("Mines");
+  mines.phase = "betting";
+  mines.result = {
+    title: "Mine Hit",
+    detail: `Lost $${formatMoney(mines.wager)}`,
+    payout: 0,
+    net: -mines.wager,
+  };
+  mines.message = mines.result.detail;
+  mines.wager = 0;
+  mines.wagerChips = [];
+  render();
+  openPopupWithDelay({ tone: "loss", title: "Mine Hit", detail: mines.result.detail, buttonLabel: "Play Again" }, 160);
+}
+
+function prepareCasinoMinesNextRound() {
+  state.mines.board = [];
+  state.mines.safePicks = 0;
+  state.mines.multiplier = 1;
+  state.mines.result = null;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetCasinoMinesForExit(refundWager = false) {
+  const mines = state.mines;
+  if (refundWager && mines.phase === "betting" && mines.wager > 0) adjustWallet(mines.wager);
+  mines.phase = "betting";
+  mines.wager = 0;
+  mines.wagerChips = [];
+  mines.message = "Place chips, start, then dodge the mines.";
+  prepareCasinoMinesNextRound();
+}
+
+function normalizeHotlineSide(side) {
+  const clean = String(side || "").replace(/^hotline-/, "");
+  return HOTLINE_COLORS.includes(clean) ? clean : null;
+}
+
+function totalHotlineBets() {
+  return totalSideBets(state.hotline.bets, HOTLINE_COLORS);
+}
+
+function canSpinHotline() {
+  return state.hotline.phase === "betting" && totalHotlineBets() > 0;
+}
+
+function canRepeatHotline() {
+  return state.hotline.phase === "betting" && totalSideBets(state.hotline.lastBets, HOTLINE_COLORS) > 0;
+}
+
+function placeHotlineBet(side, amount) {
+  const betSide = normalizeHotlineSide(side);
+  const hotline = state.hotline;
+  if (!betSide || hotline.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("hotline", totalHotlineBets(), chip)) {
+    hotline.message = maxBetMessage("hotline");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    hotline.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareHotlineNextRound();
+  adjustWallet(-chip);
+  hotline.bets[betSide] += chip;
+  hotline.betChips[betSide].push(chip);
+  hotline.message = `${betSide[0].toUpperCase() + betSide.slice(1)} bet $${formatMoney(hotline.bets[betSide])}`;
+  state.selectedAmount = chip;
+  render();
+}
+
+function toggleHotlineMode() {
+  const hotline = state.hotline;
+  if (hotline.phase !== "betting") return;
+  if (totalHotlineBets()) {
+    hotline.message = "Clear bets before changing risk.";
+    render();
+    return;
+  }
+  hotline.mode = hotline.mode === "high-risk" ? "normal" : "high-risk";
+  prepareHotlineNextRound();
+  hotline.reels = [];
+  hotline.targetIndex = Math.floor(hotlineVisibleReels()[0].length / 2);
+  hotline.message = hotline.mode === "high-risk"
+    ? "High risk: the same color must hit both lines."
+    : "Bet red, black, or yellow.";
+  render();
+}
+
+function clearHotlineBets() {
+  const hotline = state.hotline;
+  if (hotline.phase !== "betting" || !totalHotlineBets()) return;
+  adjustWallet(totalHotlineBets());
+  hotline.bets = emptySideBets(HOTLINE_COLORS);
+  hotline.betChips = emptySideChips(HOTLINE_COLORS);
+  hotline.message = "Bets cleared.";
+  render();
+}
+
+function repeatHotlineBets() {
+  const hotline = state.hotline;
+  if (!canRepeatHotline()) return;
+  const total = totalSideBets(hotline.lastBets, HOTLINE_COLORS);
+  if (total > MAX_BETS.hotline) {
+    hotline.message = maxBetMessage("hotline");
+    render();
+    return;
+  }
+  if (total > state.wallet) {
+    hotline.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareHotlineNextRound();
+  adjustWallet(-total);
+  hotline.bets = { ...hotline.lastBets };
+  hotline.betChips = Object.fromEntries(HOTLINE_COLORS.map((side) => [side, buildChipListForAmount(hotline.lastBets[side] || 0)]));
+  hotline.message = "Repeat bets ready.";
+  render();
+}
+
+function buildHotlineReel() {
+  const reel = [];
+  for (const color of HOTLINE_COLORS) {
+    for (let count = 0; count < HOTLINE_REEL_COUNTS[color]; count += 1) reel.push(color);
+  }
+  for (let index = reel.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [reel[index], reel[swapIndex]] = [reel[swapIndex], reel[index]];
+  }
+  return reel;
+}
+
+function hotlinePayout(side) {
+  const normal = HOTLINE_NORMAL_PAYOUTS[side] || 0;
+  return state.hotline.mode === "high-risk" ? normal * normal : normal;
+}
+
+function spinHotline() {
+  const hotline = state.hotline;
+  if (!canSpinHotline()) return;
+  const targetIndex = Object.values(HOTLINE_REEL_COUNTS).reduce((total, count) => total + count, 0) * HOTLINE_SPIN_SETS - HOTLINE_SPIN_TAIL_CARDS;
+  const lineCount = hotline.mode === "high-risk" ? 2 : 1;
+  hotline.phase = "spinning";
+  hotline.lastBets = { ...hotline.bets };
+  hotline.reels = Array.from({ length: lineCount }, () => buildHotlineSpinReel(targetIndex));
+  hotline.targetIndex = targetIndex;
+  hotline.result = null;
+  hotline.message = "The line is spinning.";
+  state.popup = null;
+  state.pendingReveal = { game: "hotline", title: "Dialing", detail: `${lineCount === 2 ? "Both lines are" : "The line is"} spinning.` };
+  render();
+  scheduleUiTask(settleHotline, HOTLINE_SPIN_MS + 40);
+}
+
+function buildHotlineSpinReel(targetIndex) {
+  const reel = [];
+  while (reel.length < targetIndex + HOTLINE_SPIN_TAIL_CARDS) reel.push(...buildHotlineReel());
+  for (let index = reel.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [reel[index], reel[swapIndex]] = [reel[swapIndex], reel[index]];
+  }
+  return reel.slice(0, targetIndex + HOTLINE_SPIN_TAIL_CARDS);
+}
+
+function settleHotline() {
+  const hotline = state.hotline;
+  if (hotline.phase !== "spinning") return;
+  const outcomes = hotline.reels.map((reel) => reel[hotline.targetIndex]);
+  const outcome = outcomes.length === 2 && outcomes[0] !== outcomes[1] ? null : outcomes[0];
+  const staked = totalHotlineBets();
+  const payout = Math.round((outcome ? (hotline.bets[outcome] || 0) * hotlinePayout(outcome) : 0) * 100) / 100;
+  const net = Math.round((payout - staked) * 100) / 100;
+  if (payout) adjustWallet(payout);
+  trackQuestBet("Hotline", staked);
+  awardRoundXp("Hotline");
+  hotline.phase = "betting";
+  hotline.result = {
+    color: outcome ? outcome.toUpperCase() : "NO MATCH",
+    lines: outcomes,
+    mode: hotline.mode,
+    payout,
+    net,
+    detail: netResultDetail(net),
+  };
+  hotline.message = hotline.result.detail;
+  hotline.bets = emptySideBets(HOTLINE_COLORS);
+  hotline.betChips = emptySideChips(HOTLINE_COLORS);
+  state.pendingReveal = null;
+  render();
+  openPopupWithDelay({
+    tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+    title: `${hotline.result.color} Hotline`,
+    detail: hotline.result.detail,
+    buttonLabel: "Spin Again",
+  }, 180);
+}
+
+function hotlineVisibleReels() {
+  if (state.hotline.reels.length) return state.hotline.reels;
+  const preview = buildHotlinePreviewReel();
+  return state.hotline.mode === "high-risk" ? [preview, [...preview].reverse()] : [preview];
+}
+
+function buildHotlinePreviewReel() {
+  const reel = [];
+  for (let index = 0; index < 17; index += 1) {
+    reel.push("black", "red");
+  }
+  reel.splice(17, 0, "yellow");
+  return reel;
+}
+
+function prepareHotlineNextRound() {
+  state.hotline.result = null;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetHotlineForExit(refundBets = false) {
+  const hotline = state.hotline;
+  if (refundBets && hotline.phase === "betting") adjustWallet(totalHotlineBets());
+  hotline.phase = "betting";
+  hotline.bets = emptySideBets(HOTLINE_COLORS);
+  hotline.betChips = emptySideChips(HOTLINE_COLORS);
+  hotline.message = "Bet red, black, or yellow.";
+  prepareHotlineNextRound();
+}
+
+function dicePayout() {
+  return Math.round((100 / state.dice.chance) * DICE_EDGE * 100) / 100;
+}
+
+function diceTarget() {
+  return state.dice.side === "under" ? state.dice.chance : 100 - state.dice.chance;
+}
+
+function canRollDiceRound() {
+  return state.dice.phase === "betting" && state.dice.wager > 0;
+}
+
+function canRepeatDiceBet() {
+  return state.dice.phase === "betting" && state.dice.lastWager > 0;
+}
+
+function setDiceSide(side) {
+  const dice = state.dice;
+  if (dice.phase !== "betting" || !["under", "over"].includes(side)) return;
+  prepareDiceNextRound();
+  dice.side = side;
+  dice.message = `Roll ${side} ${diceTarget()} to win.`;
+  render();
+}
+
+function setDiceChance(chance) {
+  const dice = state.dice;
+  if (dice.phase !== "betting" || !DICE_CHANCES.includes(chance)) return;
+  prepareDiceNextRound();
+  dice.chance = chance;
+  dice.message = `${chance}% chance pays ${formatMultiplier(dicePayout())}.`;
+  render();
+}
+
+function placeDiceBet(amount) {
+  const dice = state.dice;
+  if (dice.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("dice", dice.wager, chip)) {
+    dice.message = maxBetMessage("dice");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    dice.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareDiceNextRound();
+  adjustWallet(-chip);
+  dice.wager += chip;
+  dice.wagerChips.push(chip);
+  state.selectedAmount = chip;
+  dice.message = `Bet $${formatMoney(dice.wager)}.`;
+  render();
+}
+
+function clearDiceBet() {
+  const dice = state.dice;
+  if (dice.phase !== "betting" || !dice.wager) return;
+  adjustWallet(dice.wager);
+  dice.wager = 0;
+  dice.wagerChips = [];
+  dice.message = "Bet cleared.";
+  render();
+}
+
+function repeatDiceBet() {
+  const dice = state.dice;
+  if (!canRepeatDiceBet()) return;
+  if (dice.lastWager > MAX_BETS.dice) {
+    dice.message = maxBetMessage("dice");
+    render();
+    return;
+  }
+  if (dice.lastWager > state.wallet) {
+    dice.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareDiceNextRound();
+  adjustWallet(-dice.lastWager);
+  dice.wager = dice.lastWager;
+  dice.wagerChips = buildChipListForAmount(dice.lastWager);
+  dice.message = `Bet $${formatMoney(dice.wager)}.`;
+  render();
+}
+
+function rollDiceRound() {
+  const dice = state.dice;
+  if (!canRollDiceRound()) return;
+  const roll = 1 + Math.floor(Math.random() * 100);
+  const won = dice.side === "under" ? roll <= dice.chance : roll > 100 - dice.chance;
+  const payout = won ? Math.round(dice.wager * dicePayout() * 100) / 100 : 0;
+  const net = Math.round((payout - dice.wager) * 100) / 100;
+  dice.lastWager = dice.wager;
+  dice.phase = "rolling";
+  dice.roll = roll;
+  dice.result = null;
+  dice.message = "Dice are rolling.";
+  state.popup = null;
+  state.pendingReveal = { game: "dice", title: "Rolling", detail: "The hundred-side table is turning." };
+  render();
+  scheduleUiTask(() => {
+    if (payout) adjustWallet(payout);
+    trackQuestBet("Dice", dice.lastWager);
+    awardRoundXp("Dice");
+    dice.phase = "betting";
+    dice.result = {
+      title: `${roll} ${won ? "Hit" : "Miss"}`,
+      roll,
+      payout,
+      net,
+      detail: netResultDetail(net),
+    };
+    dice.message = dice.result.detail;
+    dice.wager = 0;
+    dice.wagerChips = [];
+    state.pendingReveal = null;
+    render();
+    openPopupWithDelay({
+      tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+      title: `Dice ${roll}`,
+      detail: dice.result.detail,
+      buttonLabel: "Roll Again",
+    }, 150);
+  }, 720);
+}
+
+function prepareDiceNextRound() {
+  state.dice.result = null;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetDiceForExit(refundWager = false) {
+  const dice = state.dice;
+  if (refundWager && dice.phase === "betting" && dice.wager > 0) adjustWallet(dice.wager);
+  dice.phase = "betting";
+  dice.wager = 0;
+  dice.wagerChips = [];
+  dice.message = "Set the chance, place chips, and roll.";
+  prepareDiceNextRound();
+}
+
+function goalField() {
+  return GOAL_FIELDS[state.goal.size] || GOAL_FIELDS.small;
+}
+
+function goalBlankBoard() {
+  const field = goalField();
+  return Array.from({ length: field.cols }, () => ({
+    mineRow: -1,
+    picks: Array.from({ length: field.rows }, () => false),
+  }));
+}
+
+function goalVisibleBoard() {
+  return state.goal.board.length ? state.goal.board : goalBlankBoard();
+}
+
+function goalMultiplier(safePicks) {
+  const rows = goalField().rows;
+  return Math.round(Math.pow(rows / (rows - 1), safePicks) * GOAL_EDGE * 100) / 100;
+}
+
+function goalStartRow() {
+  return Math.floor(goalField().rows / 2);
+}
+
+function canStartGoal() {
+  return state.goal.phase === "betting" && state.goal.wager > 0;
+}
+
+function canCashOutGoal() {
+  return state.goal.phase === "playing" && state.goal.safePicks > 0;
+}
+
+function canRepeatGoal() {
+  return state.goal.phase === "betting" && state.goal.lastWager > 0;
+}
+
+function setGoalSize(size) {
+  const goal = state.goal;
+  if (goal.phase !== "betting" || !GOAL_FIELDS[size]) return;
+  if (goal.wager) {
+    goal.message = "Clear the bet before changing the field.";
+    render();
+    return;
+  }
+  goal.size = size;
+  prepareGoalNextRound();
+  goal.ballRow = goalStartRow();
+  goal.message = `${GOAL_FIELDS[size].label} field ready.`;
+  render();
+}
+
+function placeGoalBet(amount) {
+  const goal = state.goal;
+  if (goal.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("goal", goal.wager, chip)) {
+    goal.message = maxBetMessage("goal");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    goal.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareGoalNextRound();
+  adjustWallet(-chip);
+  goal.wager += chip;
+  goal.wagerChips.push(chip);
+  state.selectedAmount = chip;
+  goal.message = `Bet $${formatMoney(goal.wager)}.`;
+  render();
+}
+
+function clearGoalBet() {
+  const goal = state.goal;
+  if (goal.phase !== "betting" || !goal.wager) return;
+  adjustWallet(goal.wager);
+  goal.wager = 0;
+  goal.wagerChips = [];
+  goal.message = "Bet cleared.";
+  render();
+}
+
+function repeatGoalBet() {
+  const goal = state.goal;
+  if (!canRepeatGoal()) return;
+  if (goal.lastWager > MAX_BETS.goal) {
+    goal.message = maxBetMessage("goal");
+    render();
+    return;
+  }
+  if (goal.lastWager > state.wallet) {
+    goal.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareGoalNextRound();
+  adjustWallet(-goal.lastWager);
+  goal.wager = goal.lastWager;
+  goal.wagerChips = buildChipListForAmount(goal.lastWager);
+  goal.message = `Bet $${formatMoney(goal.wager)}.`;
+  render();
+}
+
+function startGoalRound() {
+  const goal = state.goal;
+  if (!canStartGoal()) return;
+  const field = goalField();
+  goal.phase = "playing";
+  goal.lastWager = goal.wager;
+  goal.board = Array.from({ length: field.cols }, () => ({
+    mineRow: Math.floor(Math.random() * field.rows),
+    picks: Array.from({ length: field.rows }, () => false),
+  }));
+  goal.ballRow = goalStartRow();
+  goal.column = -1;
+  goal.safePicks = 0;
+  goal.multiplier = 1;
+  goal.result = null;
+  goal.message = "Pick one lane in the next column.";
+  state.popup = null;
+  state.pendingReveal = null;
+  render();
+}
+
+function pickGoalCell(row, col) {
+  const goal = state.goal;
+  const boardColumn = goal.board[col];
+  if (goal.phase !== "playing" || !boardColumn || col !== goal.column + 1 || row < 0 || row >= goalField().rows) return;
+  boardColumn.picks[row] = true;
+  goal.ballRow = row;
+  goal.column = col;
+  if (boardColumn.mineRow === row) {
+    revealGoalMines();
+    finishGoalLoss();
+    return;
+  }
+  goal.safePicks += 1;
+  goal.multiplier = goalMultiplier(goal.safePicks);
+  if (goal.safePicks === goalField().cols) {
+    cashOutGoal(true);
+    return;
+  }
+  goal.message = `${formatMultiplier(goal.multiplier)} ready. Pick or cash out.`;
+  render();
+}
+
+function revealGoalMines() {
+  for (const column of state.goal.board) {
+    if (column.mineRow >= 0) column.picks[column.mineRow] = true;
+  }
+}
+
+function cashOutGoal(fieldCleared = false) {
+  const goal = state.goal;
+  if (!fieldCleared && !canCashOutGoal()) return;
+  const payout = Math.round(goal.wager * goal.multiplier * 100) / 100;
+  const net = Math.round((payout - goal.wager) * 100) / 100;
+  adjustWallet(payout);
+  trackQuestBet("Goal", goal.lastWager);
+  awardRoundXp("Goal");
+  goal.phase = "betting";
+  revealGoalMines();
+  goal.result = {
+    title: fieldCleared ? "Goal Scored" : `Cashed ${formatMultiplier(goal.multiplier)}`,
+    payout,
+    net,
+    detail: netResultDetail(net),
+  };
+  goal.message = goal.result.detail;
+  goal.wager = 0;
+  goal.wagerChips = [];
+  render();
+  openPopupWithDelay({
+    tone: net > 0 ? "win" : net < 0 ? "loss" : "idle",
+    title: goal.result.title,
+    detail: goal.result.detail,
+    buttonLabel: "Kick Again",
+  }, 160);
+}
+
+function finishGoalLoss() {
+  const goal = state.goal;
+  trackQuestBet("Goal", goal.lastWager);
+  awardRoundXp("Goal");
+  goal.phase = "betting";
+  goal.result = {
+    title: "Mine Save",
+    payout: 0,
+    net: -goal.wager,
+    detail: `Lost $${formatMoney(goal.wager)}`,
+  };
+  goal.message = goal.result.detail;
+  goal.wager = 0;
+  goal.wagerChips = [];
+  render();
+  openPopupWithDelay({ tone: "loss", title: goal.result.title, detail: goal.result.detail, buttonLabel: "Kick Again" }, 160);
+}
+
+function prepareGoalNextRound() {
+  state.goal.board = [];
+  state.goal.column = -1;
+  state.goal.safePicks = 0;
+  state.goal.multiplier = 1;
+  state.goal.result = null;
+  state.goal.ballRow = goalStartRow();
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetGoalForExit(refundWager = false) {
+  const goal = state.goal;
+  if (refundWager && goal.phase === "betting" && goal.wager > 0) adjustWallet(goal.wager);
+  goal.phase = "betting";
+  goal.wager = 0;
+  goal.wagerChips = [];
+  goal.message = "Pick a field, place chips, and kick off.";
+  prepareGoalNextRound();
+}
+
+function canDrawKenoRound() {
+  return state.keno.phase === "betting" && state.keno.wager > 0 && state.keno.picks.length === KENO_PICKS;
+}
+
+function canRepeatKenoBet() {
+  return state.keno.phase === "betting" && state.keno.lastWager > 0;
+}
+
+function placeKenoBet(amount) {
+  const keno = state.keno;
+  if (keno.phase !== "betting") return;
+  const chip = sanitizeMoney(amount);
+  if (chip <= 0) return;
+  if (exceedsMaxBet("keno", keno.wager, chip)) {
+    keno.message = maxBetMessage("keno");
+    render();
+    return;
+  }
+  if (chip > state.wallet) {
+    keno.message = "Not enough in the wallet.";
+    render();
+    return;
+  }
+  prepareKenoNextRound();
+  adjustWallet(-chip);
+  keno.wager += chip;
+  keno.wagerChips.push(chip);
+  state.selectedAmount = chip;
+  keno.message = keno.picks.length === KENO_PICKS
+    ? `Bet $${formatMoney(keno.wager)}. Draw ready.`
+    : `Bet $${formatMoney(keno.wager)}. Pick ${KENO_PICKS - keno.picks.length} more.`;
+  render();
+}
+
+function clearKenoBet() {
+  const keno = state.keno;
+  if (keno.phase !== "betting" || !keno.wager) return;
+  adjustWallet(keno.wager);
+  keno.wager = 0;
+  keno.wagerChips = [];
+  keno.message = "Bet cleared.";
+  render();
+}
+
+function repeatKenoBet() {
+  const keno = state.keno;
+  if (!canRepeatKenoBet()) return;
+  if (keno.lastWager > MAX_BETS.keno) {
+    keno.message = maxBetMessage("keno");
+    render();
+    return;
+  }
+  if (keno.lastWager > state.wallet) {
+    keno.message = "Wallet is too light for repeat.";
+    render();
+    return;
+  }
+  prepareKenoNextRound();
+  adjustWallet(-keno.lastWager);
+  keno.wager = keno.lastWager;
+  keno.wagerChips = buildChipListForAmount(keno.lastWager);
+  keno.message = keno.picks.length === KENO_PICKS
+    ? `Bet $${formatMoney(keno.wager)}. Draw ready.`
+    : `Bet $${formatMoney(keno.wager)}. Pick ${KENO_PICKS - keno.picks.length} more.`;
+  render();
+}
+
+function toggleKenoPick(number) {
+  const keno = state.keno;
+  if (keno.phase !== "betting" || number < 1 || number > KENO_ROWS * KENO_COLS) return;
+  prepareKenoNextRound();
+  if (keno.picks.includes(number)) {
+    keno.picks = keno.picks.filter((pick) => pick !== number);
+    keno.message = `Pick ${KENO_PICKS - keno.picks.length} more.`;
+    render();
+    return;
+  }
+  if (keno.picks.length >= KENO_PICKS) {
+    keno.message = "Exactly 5 picks. Remove one to change it.";
+    render();
+    return;
+  }
+  keno.picks = [...keno.picks, number].sort((a, b) => a - b);
+  keno.message = keno.picks.length === KENO_PICKS ? "Five picked. Place chips and draw." : `Pick ${KENO_PICKS - keno.picks.length} more.`;
+  render();
+}
+
+function clearKenoPicks() {
+  const keno = state.keno;
+  if (keno.phase !== "betting" || !keno.picks.length) return;
+  prepareKenoNextRound();
+  keno.picks = [];
+  keno.message = "Pick exactly 5 numbers.";
+  render();
+}
+
+function drawKenoRound() {
+  const keno = state.keno;
+  if (!canDrawKenoRound()) {
+    keno.message = keno.picks.length !== KENO_PICKS ? "Pick exactly 5 numbers first." : "Place chips, then draw.";
+    render();
+    return;
+  }
+  const drawn = shuffledNumbers(KENO_ROWS * KENO_COLS).slice(0, KENO_DRAW_COUNT).sort((a, b) => a - b);
+  const hits = keno.picks.filter((number) => drawn.includes(number));
+  const multiplier = KENO_MULTIPLIERS[hits.length] || 0;
+  const payout = Math.round(keno.wager * multiplier * 100) / 100;
+  const net = Math.round((payout - keno.wager) * 100) / 100;
+  keno.phase = "drawing";
+  keno.lastWager = keno.wager;
+  keno.drawn = drawn;
+  keno.result = null;
+  keno.message = "Winning numbers are drawing.";
+  state.popup = null;
+  state.pendingReveal = { game: "keno", title: "Drawing", detail: "Ten winning numbers are landing." };
+  render();
+  scheduleUiTask(() => {
+    if (payout) adjustWallet(payout);
+    trackQuestBet("Keno", keno.lastWager);
+    awardRoundXp("Keno");
+    keno.phase = "betting";
+    keno.result = {
+      title: `${hits.length} Hit${hits.length === 1 ? "" : "s"}`,
+      hits,
+      drawn,
+      multiplier,
+      payout,
+      net,
+      detail: netResultDetail(net),
+    };
+    keno.message = keno.result.detail;
+    keno.wager = 0;
+    keno.wagerChips = [];
+    state.pendingReveal = null;
+    render();
+    openPopupWithDelay({
+      tone: net > 0 ? "win" : "loss",
+      title: `Keno ${keno.result.title}`,
+      detail: `${formatMultiplier(multiplier)}. ${keno.result.detail}`,
+      buttonLabel: "Draw Again",
+    }, 160);
+  }, 760);
+}
+
+function shuffledNumbers(count) {
+  const numbers = Array.from({ length: count }, (_, index) => index + 1);
+  for (let index = numbers.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [numbers[index], numbers[swap]] = [numbers[swap], numbers[index]];
+  }
+  return numbers;
+}
+
+function prepareKenoNextRound() {
+  state.keno.drawn = [];
+  state.keno.result = null;
+  state.popup = null;
+  state.pendingReveal = null;
+}
+
+function resetKenoForExit(refundWager = false) {
+  const keno = state.keno;
+  if (refundWager && keno.phase === "betting" && keno.wager > 0) adjustWallet(keno.wager);
+  keno.phase = "betting";
+  keno.wager = 0;
+  keno.wagerChips = [];
+  keno.picks = [];
+  keno.message = "Pick exactly 5 numbers, place chips, and draw.";
+  prepareKenoNextRound();
 }
 
 function resetMinesweeper() {
@@ -3756,7 +5842,7 @@ function checkMinesweeperWin() {
   const mines = state.minesweeper;
   const safeRevealed = mines.board.every((cell, index) => cell.mine || mines.revealed[index]);
   if (!safeRevealed) {
-    mines.message = `${mines.points} point${mines.points === 1 ? "" : "s"} ready. Cash out or keep clearing.`;
+    mines.message = `${mines.points} point${mines.points === 1 ? "" : "s"} ready. Clear the board to cash out.`;
     return;
   }
   mines.phase = "won";
@@ -3772,7 +5858,7 @@ function checkMinesweeperWin() {
 
 function canCashOutMinesweeper() {
   const mines = state.minesweeper;
-  return (mines.phase === "playing" || mines.phase === "won") && mines.cashOut > 0;
+  return mines.phase === "won" && mines.cashOut > 0;
 }
 
 function cashOutMinesweeper() {
@@ -3944,6 +6030,7 @@ function finishSlotSpin(finalGrid) {
   const wager = slot.wager;
   const net = Math.round((payout - wager) * 100) / 100;
   if (payout > 0) adjustWallet(payout);
+  trackQuestBet("Slots", wager);
   awardRoundXp("Slots");
 
   slot.result = {
@@ -4119,6 +6206,7 @@ function scheduleDealerDrawStep() {
 function payoutBlackjackRound(title, detail, returnedAmount, net, tone, delay = 1000) {
   const bj = state.blackjack;
   if (returnedAmount > 0) adjustWallet(returnedAmount);
+  trackQuestBet("Blackjack", bj.lastWager);
   awardRoundXp("Blackjack");
   bj.phase = "betting";
   bj.dealerReveal = true;
@@ -4314,6 +6402,81 @@ window.render_game_to_text = () => JSON.stringify({
     result: state.crash.result,
     message: state.crash.message,
   },
+  coinflip: {
+    phase: state.coinflip.phase,
+    bets: state.coinflip.bets,
+    face: state.coinflip.face,
+    sideChance: COINFLIP_SIDE_CHANCE,
+    payouts: COINFLIP_PAYOUTS,
+    result: state.coinflip.result,
+    message: state.coinflip.message,
+  },
+  mines: {
+    phase: state.mines.phase,
+    rows: CASINO_MINES_ROWS,
+    cols: CASINO_MINES_COLS,
+    mineCount: CASINO_MINES_COUNT,
+    wager: state.mines.wager,
+    safePicks: state.mines.safePicks,
+    multiplier: state.mines.multiplier,
+    visibleBoard: casinoMinesVisibleBoard().map((cell) => ({
+      revealed: cell.revealed,
+      value: cell.revealed ? (cell.mine ? "mine" : "safe") : null,
+    })),
+    result: state.mines.result,
+    message: state.mines.message,
+  },
+  hotline: {
+    phase: state.hotline.phase,
+    bets: state.hotline.bets,
+    mode: state.hotline.mode,
+    reels: hotlineVisibleReels(),
+    targetIndex: state.hotline.targetIndex,
+    reelCounts: HOTLINE_REEL_COUNTS,
+    payouts: Object.fromEntries(HOTLINE_COLORS.map((color) => [color, hotlinePayout(color)])),
+    result: state.hotline.result,
+    message: state.hotline.message,
+  },
+  dice: {
+    phase: state.dice.phase,
+    wager: state.dice.wager,
+    side: state.dice.side,
+    chance: state.dice.chance,
+    target: diceTarget(),
+    payout: dicePayout(),
+    roll: state.dice.roll,
+    result: state.dice.result,
+    message: state.dice.message,
+  },
+  goal: {
+    phase: state.goal.phase,
+    size: state.goal.size,
+    field: goalField(),
+    wager: state.goal.wager,
+    ballRow: state.goal.ballRow,
+    column: state.goal.column,
+    safePicks: state.goal.safePicks,
+    multiplier: state.goal.multiplier,
+    visibleBoard: goalVisibleBoard().map((column) => ({
+      picks: column.picks,
+      mineRow: column.picks[column.mineRow] ? column.mineRow : null,
+    })),
+    result: state.goal.result,
+    message: state.goal.message,
+  },
+  keno: {
+    phase: state.keno.phase,
+    rows: KENO_ROWS,
+    cols: KENO_COLS,
+    pickCount: KENO_PICKS,
+    drawCount: KENO_DRAW_COUNT,
+    wager: state.keno.wager,
+    picks: state.keno.picks,
+    drawn: state.keno.drawn,
+    multipliers: KENO_MULTIPLIERS,
+    result: state.keno.result,
+    message: state.keno.message,
+  },
   minesweeper: {
     phase: state.minesweeper.phase,
     rows: MINESWEEPER_ROWS,
@@ -4344,7 +6507,7 @@ window.render_game_to_text = () => JSON.stringify({
   },
   message: state.spinMessage,
   dragActive: dragState.active,
-  availableGames: ["roulette", "blackjack", "slots", "baccarat", "bus", "plinko", "crash", "joku", "minesweeper", "yahtzee"],
+  availableGames: ["roulette", "blackjack", "slots", "baccarat", "bus", "plinko", "crash", "coinflip", "mines", "hotline", "dice", "goal", "keno", "joku", "minesweeper", "yahtzee"],
 });
 
 window.advanceTime = (ms = 0) => {
@@ -4367,6 +6530,7 @@ window.advanceTime = (ms = 0) => {
 };
 
 render();
+applyTheme(menuState.theme);
 initializeAuth();
 
 /* Yahtzee Game Logic */
@@ -5261,6 +7425,7 @@ function resolveBaccaratRound() {
       : `${summary} Push.`;
 
   adjustWallet(payout);
+  trackQuestBet("Baccarat", staked);
   awardRoundXp("Baccarat");
   baccarat.phase = "betting";
   baccarat.revealedPlayerCards = baccarat.playerHand.length;
@@ -5368,7 +7533,8 @@ function cashOutRideTheBus() {
   if (bus.phase !== "guessing" || payout <= 0) return;
 
   adjustWallet(payout);
-  awardRoundXp("Ride the Bus");
+  trackQuestBet("Bus", bus.wager);
+  awardRoundXp("Bus");
   bus.phase = "betting";
   bus.result = {
     title: "Cashed Out",
@@ -5407,11 +7573,25 @@ function startRideTheBus() {
 
   scheduleUiTask(() => {
     if (bus.deck.length < 8) bus.deck = createDeck();
-    bus.cards = [bus.deck.pop()];
+    bus.cards = [drawRideTheBusStartCard()];
     bus.message = "Red or black?";
     state.pendingReveal = null;
     render();
   }, 420);
+}
+
+function drawRideTheBusStartCard() {
+  const bus = state.bus;
+  const middleCards = bus.deck
+    .map((card, index) => ({ card, index }))
+    .filter(({ card }) => ["6", "7", "8", "9"].includes(card.rank));
+
+  if (middleCards.length && Math.random() < RIDE_BUS_MIDDLE_START_CHANCE) {
+    const pick = middleCards[Math.floor(Math.random() * middleCards.length)];
+    return bus.deck.splice(pick.index, 1)[0];
+  }
+
+  return bus.deck.pop();
 }
 
 function answerRideTheBusGuess(guess) {
@@ -5468,7 +7648,8 @@ function answerRideTheBusGuess(guess) {
     const finalMultiplier = RIDE_BUS_STEPS[RIDE_BUS_STEPS.length - 1].multiplier;
     const payout = Math.round(bus.wager * finalMultiplier * 100) / 100;
     adjustWallet(payout);
-    awardRoundXp("Ride the Bus");
+    trackQuestBet("Bus", bus.wager);
+    awardRoundXp("Bus");
     bus.phase = "betting";
     bus.result = {
       title: "Ride Complete",
@@ -5628,13 +7809,13 @@ function renderCrash() {
           </button>
           <div class="crash-sky">
             <div class="crash-grid-lines"></div>
-            <div class="crash-plane ${isCrashFlying() ? "flying" : crash.phase === "crashed" ? "crashed" : ""}" style="--crash-progress:${Math.max(0, Math.min(1, crash.multiplier / 6))}"></div>
+            <div class="crash-plane ${isCrashFlying() ? "flying" : crash.phase === "crashed" ? "crashed" : ""}" style="--crash-progress:${Math.max(0, Math.min(1, crash.multiplier / 12))}"></div>
             <div class="crash-multiplier">${formatMultiplier(crash.multiplier)}</div>
-            ${crash.phase === "landing" ? `<div class="crash-countdown">Landing ${Math.ceil(crash.cashoutCountdownMs / 1000)}s</div>` : ""}
+            ${crash.phase === "landing" ? `<div class="crash-countdown">Landing ${formatCountdown(crash.cashoutCountdownMs)}s</div>` : ""}
           </div>
           <div class="crash-controls">
             <button class="pixel-button green" data-action="crash-start" ${canStartCrash() ? "" : "disabled"}>Launch</button>
-            <button class="pixel-button gold" data-action="crash-cashout" ${crash.phase === "flying" ? "" : "disabled"}>${crash.phase === "landing" ? "Landing..." : "Cash Out"}</button>
+            <button class="pixel-button gold" data-action="crash-cashout" ${canCashOutCrash() ? "" : "disabled"}>${crash.phase === "landing" ? "Landing..." : "Cash Out"}</button>
             <button class="pixel-button red" data-action="crash-clear" ${crash.phase === "betting" && crash.wager ? "" : "disabled"}>Clear</button>
             <button class="pixel-button" data-action="crash-repeat" ${canRepeatCrash() ? "" : "disabled"}>Repeat</button>
           </div>
@@ -5690,6 +7871,396 @@ function renderCrashWagerChips() {
   `).join("");
 }
 
+function renderCoinflip() {
+  const coin = state.coinflip;
+  return `
+    <section class="coinflip-screen surface ${escapeAttribute(coin.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderCoinflipResult()}
+        <div class="status-pill muted">On coin $${formatMoney(totalCoinflipBets())}</div>
+      </div>
+      <div class="coinflip-table">
+        <div class="coinflip-felt">
+          <div class="coinflip-stage">
+            <div class="coin ${coin.phase === "flipping" ? "flipping" : ""} face-${escapeAttribute(coin.face)}">
+              <span class="coin-face heads">H</span>
+              <span class="coin-face tails">T</span>
+              <span class="coin-rim">SIDE</span>
+            </div>
+          </div>
+          <div class="coinflip-bets">
+            ${renderCoinflipSpot("heads", "Heads", "2x")}
+            ${renderCoinflipSpot("tails", "Tails", "2x")}
+            ${renderCoinflipSpot("side", "Side", "3% / 30x")}
+          </div>
+          <div class="coinflip-controls">
+            <button class="pixel-button green" data-action="coinflip-flip" ${canFlipCoin() ? "" : "disabled"}>Flip</button>
+            <button class="pixel-button red" data-action="coinflip-clear" ${coin.phase === "betting" && totalCoinflipBets() ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="coinflip-repeat" ${canRepeatCoinflip() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderCoinflipSpot(side, label, payout) {
+  const coin = state.coinflip;
+  return `
+    <button class="coinflip-spot ${side} ${state.hoverBetId === `coinflip-${side}` ? "hover" : ""}" data-action="coinflip-bet" data-side="${side}" data-bet-zone="coinflip-${side}">
+      <span>${escapeHtml(label)}</span>
+      <strong>$${formatMoney(coin.bets[side])}</strong>
+      <em>${escapeHtml(payout)}</em>
+      <div class="coinflip-bet-chips">${renderStackedChips(coin.betChips[side], "coinflip-chip")}</div>
+    </button>
+  `;
+}
+
+function renderCoinflipResult() {
+  const coin = state.coinflip;
+  if (state.pendingReveal && state.pendingReveal.game === "coinflip") {
+    return `<div class="result-board pending"><div class="result-main">Flipping</div><div class="result-sub">The coin is still in the air.</div></div>`;
+  }
+  if (coin.result) {
+    return `<div class="result-board ${coin.result.net > 0 ? "win" : coin.result.net < 0 ? "loss" : "idle"}"><div class="result-main">${escapeHtml(coin.result.outcome)}</div><div class="result-sub">${escapeHtml(coin.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Coinflip</div><div class="result-sub">${escapeHtml(coin.message)}</div></div>`;
+}
+
+function renderCasinoMines() {
+  const mines = state.mines;
+  return `
+    <section class="casino-mines-screen surface ${escapeAttribute(mines.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderCasinoMinesResult()}
+        <div class="status-pill muted">Bet $${formatMoney(mines.wager)}</div>
+      </div>
+      <div class="casino-mines-table">
+        <div class="casino-mines-felt">
+          <button class="casino-mines-pot ${state.hoverBetId === "mines-main" ? "hover" : ""}" data-action="mines-bet" data-bet-zone="mines-main">
+            <span>Bet</span>
+            <strong>$${formatMoney(mines.wager)}</strong>
+            <div class="casino-mines-bet-chips">${renderStackedChips(mines.wagerChips, "casino-mines-chip")}</div>
+          </button>
+          <div class="casino-mines-board">
+            ${casinoMinesVisibleBoard().map((cell, index) => renderCasinoMinesCell(cell, index)).join("")}
+          </div>
+          <aside class="casino-mines-rail">
+            <div class="joku-rail-card"><span>Mines</span><strong>${CASINO_MINES_COUNT}</strong></div>
+            <div class="joku-rail-card"><span>Safe picks</span><strong>${mines.safePicks}</strong></div>
+            <div class="joku-rail-card"><span>Cash out</span><strong>${formatMultiplier(mines.multiplier)}</strong></div>
+          </aside>
+          <div class="casino-mines-controls">
+            <button class="pixel-button green" data-action="mines-start" ${canStartCasinoMines() ? "" : "disabled"}>Start</button>
+            <button class="pixel-button gold" data-action="mines-cashout" ${canCashOutCasinoMines() ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button red" data-action="mines-clear" ${mines.phase === "betting" && mines.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button" data-action="mines-repeat" ${canRepeatCasinoMines() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderCasinoMinesCell(cell, index) {
+  const playable = state.mines.phase === "playing" && !cell.revealed;
+  return `
+    <button class="casino-mines-cell ${cell.revealed ? "revealed" : ""} ${cell.mine && cell.revealed ? "mine" : ""}" data-action="mines-open" data-index="${index}" ${playable ? "" : "disabled"}>
+      ${cell.revealed ? (cell.mine ? "*" : "$") : "?"}
+    </button>
+  `;
+}
+
+function renderCasinoMinesResult() {
+  const mines = state.mines;
+  if (mines.result) {
+    return `<div class="result-board ${mines.result.net > 0 ? "win" : "loss"}"><div class="result-main">${escapeHtml(mines.result.title)}</div><div class="result-sub">${escapeHtml(mines.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Mines</div><div class="result-sub">${escapeHtml(mines.message)}</div></div>`;
+}
+
+function renderHotline() {
+  const hotline = state.hotline;
+  const reels = hotlineVisibleReels();
+  return `
+    <section class="hotline-screen surface ${escapeAttribute(hotline.phase)} ${escapeAttribute(hotline.mode)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderHotlineResult()}
+        <div class="status-pill muted">On line $${formatMoney(totalHotlineBets())}</div>
+      </div>
+      <div class="hotline-table">
+        <div class="hotline-felt">
+          <div class="hotline-lines">
+            ${reels.map((reel) => `
+              <div class="hotline-window">
+                <div class="hotline-pointer"></div>
+                <div class="hotline-reel" style="--target:${hotline.targetIndex || 0}">
+                  ${reel.map((color) => `<span class="hotline-card ${color}">${color === "yellow" ? "Y" : color === "red" ? "R" : "B"}</span>`).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="hotline-bets">
+            ${renderHotlineSpot("black")}
+            ${renderHotlineSpot("red")}
+            ${renderHotlineSpot("yellow")}
+          </div>
+          <div class="hotline-controls">
+            <button class="pixel-button green" data-action="hotline-spin" ${canSpinHotline() ? "" : "disabled"}>Spin</button>
+            <button class="pixel-button" data-action="hotline-mode" ${hotline.phase === "betting" && !totalHotlineBets() ? "" : "disabled"}>${hotline.mode === "high-risk" ? "Normal" : "High Risk"}</button>
+            <button class="pixel-button red" data-action="hotline-clear" ${hotline.phase === "betting" && totalHotlineBets() ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="hotline-repeat" ${canRepeatHotline() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderHotlineSpot(side) {
+  const hotline = state.hotline;
+  return `
+    <button class="hotline-spot ${side} ${state.hoverBetId === `hotline-${side}` ? "hover" : ""}" data-action="hotline-bet" data-side="${side}" data-bet-zone="hotline-${side}">
+      <span>${escapeHtml(side)}</span>
+      <strong>$${formatMoney(hotline.bets[side])}</strong>
+      <em>${escapeHtml(formatMultiplier(hotlinePayout(side)))}</em>
+      <div class="hotline-bet-chips">${renderStackedChips(hotline.betChips[side], "hotline-chip")}</div>
+    </button>
+  `;
+}
+
+function renderHotlineResult() {
+  const hotline = state.hotline;
+  if (state.pendingReveal && state.pendingReveal.game === "hotline") {
+    return `<div class="result-board pending"><div class="result-main">Dialing</div><div class="result-sub">The strip is spinning.</div></div>`;
+  }
+  if (hotline.result) {
+    return `<div class="result-board ${hotline.result.net > 0 ? "win" : hotline.result.net < 0 ? "loss" : "idle"}"><div class="result-main">${escapeHtml(hotline.result.color)}</div><div class="result-sub">${escapeHtml(hotline.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Hotline</div><div class="result-sub">${escapeHtml(hotline.message)}</div></div>`;
+}
+
+function renderDice() {
+  const dice = state.dice;
+  return `
+    <section class="dice-screen surface ${escapeAttribute(dice.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderDiceResult()}
+        <div class="status-pill muted">Bet $${formatMoney(dice.wager)}</div>
+      </div>
+      <div class="dice-table">
+        <div class="dice-felt">
+          <button class="dice-pot ${state.hoverBetId === "dice-main" ? "hover" : ""}" data-action="dice-bet" data-bet-zone="dice-main">
+            <span>Bet</span>
+            <strong>$${formatMoney(dice.wager)}</strong>
+            <div class="dice-bet-chips">${renderStackedChips(dice.wagerChips, "dice-chip")}</div>
+          </button>
+          <div class="dice-stage">
+            <div class="dice-number">${dice.roll || "--"}</div>
+            <div class="dice-track">
+              <span class="dice-zone ${dice.side}" style="--chance:${dice.chance}"></span>
+              <i style="--roll:${dice.roll || diceTarget()}"></i>
+            </div>
+            <div class="dice-rail">
+              <div class="joku-rail-card"><span>${escapeHtml(dice.side)}</span><strong>${diceTarget()}</strong></div>
+              <div class="joku-rail-card"><span>Chance</span><strong>${dice.chance}%</strong></div>
+              <div class="joku-rail-card"><span>Payout</span><strong>${formatMultiplier(dicePayout())}</strong></div>
+            </div>
+          </div>
+          <div class="dice-settings">
+            <div class="dice-toggle">
+              <button class="pill-button ${dice.side === "under" ? "active" : ""}" data-action="dice-side" data-side="under">Under</button>
+              <button class="pill-button ${dice.side === "over" ? "active" : ""}" data-action="dice-side" data-side="over">Over</button>
+            </div>
+            <div class="dice-toggle">
+              ${DICE_CHANCES.map((chance) => `<button class="pill-button ${dice.chance === chance ? "active" : ""}" data-action="dice-chance" data-chance="${chance}">${chance}%</button>`).join("")}
+            </div>
+          </div>
+          <div class="dice-controls">
+            <button class="pixel-button green" data-action="dice-roll" ${canRollDiceRound() ? "" : "disabled"}>Roll</button>
+            <button class="pixel-button red" data-action="dice-clear" ${dice.phase === "betting" && dice.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button gold" data-action="dice-repeat" ${canRepeatDiceBet() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderDiceResult() {
+  const dice = state.dice;
+  if (state.pendingReveal && state.pendingReveal.game === "dice") {
+    return `<div class="result-board pending"><div class="result-main">Rolling</div><div class="result-sub">Dice are turning.</div></div>`;
+  }
+  if (dice.result) {
+    return `<div class="result-board ${dice.result.net > 0 ? "win" : "loss"}"><div class="result-main">${escapeHtml(dice.result.title)}</div><div class="result-sub">${escapeHtml(dice.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Dice</div><div class="result-sub">${escapeHtml(dice.message)}</div></div>`;
+}
+
+function renderGoal() {
+  const goal = state.goal;
+  const field = goalField();
+  return `
+    <section class="goal-screen surface ${escapeAttribute(goal.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderGoalResult()}
+        <div class="status-pill muted">Bet $${formatMoney(goal.wager)}</div>
+      </div>
+      <div class="goal-table">
+        <div class="goal-felt">
+          <button class="goal-pot ${state.hoverBetId === "goal-main" ? "hover" : ""}" data-action="goal-bet" data-bet-zone="goal-main">
+            <span>Bet</span>
+            <strong>$${formatMoney(goal.wager)}</strong>
+            <div class="goal-bet-chips">${renderStackedChips(goal.wagerChips, "goal-chip")}</div>
+          </button>
+          <div class="goal-board-wrap">
+            <div class="goal-board" style="--goal-cols:${field.cols};--goal-lanes:${field.cols + 1};--goal-rows:${field.rows}">
+              <div class="goal-start">
+                ${Array.from({ length: field.rows }, (_, row) => `<span class="${row === goal.ballRow && goal.column < 0 ? "ball" : ""}"></span>`).join("")}
+              </div>
+              ${goalVisibleBoard().map((column, col) => `
+                <div class="goal-column ${col === goal.column + 1 && goal.phase === "playing" ? "next" : ""}">
+                  ${column.picks.map((picked, row) => renderGoalCell(column, row, col, picked)).join("")}
+                </div>
+              `).join("")}
+            </div>
+          </div>
+          <aside class="goal-rail">
+            <div class="joku-rail-card"><span>Field</span><strong>${escapeHtml(field.label)}</strong></div>
+            <div class="joku-rail-card"><span>Columns</span><strong>${goal.safePicks}/${field.cols}</strong></div>
+            <div class="joku-rail-card"><span>Cash out</span><strong>${formatMultiplier(goal.multiplier)}</strong></div>
+          </aside>
+          <div class="goal-size">
+            ${Object.entries(GOAL_FIELDS).map(([size, item]) => `<button class="pill-button ${goal.size === size ? "active" : ""}" data-action="goal-size" data-size="${size}">${escapeHtml(item.label)}</button>`).join("")}
+          </div>
+          <div class="goal-controls">
+            <button class="pixel-button green" data-action="goal-start" ${canStartGoal() ? "" : "disabled"}>Kick</button>
+            <button class="pixel-button gold" data-action="goal-cashout" ${canCashOutGoal() ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button red" data-action="goal-clear" ${goal.phase === "betting" && goal.wager ? "" : "disabled"}>Clear</button>
+            <button class="pixel-button" data-action="goal-repeat" ${canRepeatGoal() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderGoalCell(column, row, col, picked) {
+  const goal = state.goal;
+  const revealedMine = picked && column.mineRow === row;
+  const ball = goal.column === col && goal.ballRow === row && !revealedMine;
+  const playable = goal.phase === "playing" && col === goal.column + 1;
+  return `
+    <button class="goal-cell ${picked ? "picked" : ""} ${revealedMine ? "mine" : ""} ${ball ? "ball" : ""}" data-action="goal-pick" data-row="${row}" data-col="${col}" ${playable ? "" : "disabled"}>
+      ${revealedMine ? "*" : ""}
+    </button>
+  `;
+}
+
+function renderGoalResult() {
+  const goal = state.goal;
+  if (goal.result) {
+    return `<div class="result-board ${goal.result.net > 0 ? "win" : "loss"}"><div class="result-main">${escapeHtml(goal.result.title)}</div><div class="result-sub">${escapeHtml(goal.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Goal</div><div class="result-sub">${escapeHtml(goal.message)}</div></div>`;
+}
+
+function renderKeno() {
+  const keno = state.keno;
+  return `
+    <section class="keno-screen surface ${escapeAttribute(keno.phase)}">
+      <div class="roulette-head">
+        <button class="pill-button menu-button" data-action="go-menu">Menu</button>
+        ${renderKenoResult()}
+        <div class="status-pill muted">Bet $${formatMoney(keno.wager)}</div>
+      </div>
+      <div class="keno-table">
+        <div class="keno-felt">
+          <button class="keno-pot ${state.hoverBetId === "keno-main" ? "hover" : ""}" data-action="keno-bet" data-bet-zone="keno-main">
+            <span>Bet</span>
+            <strong>$${formatMoney(keno.wager)}</strong>
+            <div class="keno-bet-chips">${renderStackedChips(keno.wagerChips, "keno-chip")}</div>
+          </button>
+          <div class="keno-board">
+            ${Array.from({ length: KENO_ROWS * KENO_COLS }, (_, index) => renderKenoNumber(index + 1)).join("")}
+          </div>
+          <aside class="keno-rail">
+            <div class="joku-rail-card"><span>Picks</span><strong>${keno.picks.length}/${KENO_PICKS}</strong></div>
+            <div class="joku-rail-card"><span>Drawn</span><strong>${keno.drawn.length}/${KENO_DRAW_COUNT}</strong></div>
+            <div class="keno-paytable">
+              ${Object.entries(KENO_MULTIPLIERS).map(([hits, multiplier]) => `<div><span>${hits} hit${hits === "1" ? "" : "s"}</span><strong>${formatMultiplier(multiplier)}</strong></div>`).join("")}
+            </div>
+          </aside>
+          <div class="keno-controls">
+            <button class="pixel-button green" data-action="keno-draw" ${canDrawKenoRound() ? "" : "disabled"}>Draw</button>
+            <button class="pixel-button" data-action="keno-picks-clear" ${keno.phase === "betting" && keno.picks.length ? "" : "disabled"}>Clear Picks</button>
+            <button class="pixel-button red" data-action="keno-clear" ${keno.phase === "betting" && keno.wager ? "" : "disabled"}>Clear Bet</button>
+            <button class="pixel-button gold" data-action="keno-repeat" ${canRepeatKenoBet() ? "" : "disabled"}>Repeat</button>
+          </div>
+        </div>
+      </div>
+      ${renderPaidWalletTray()}
+      ${renderPopup()}
+    </section>
+  `;
+}
+
+function renderKenoNumber(number) {
+  const keno = state.keno;
+  const selected = keno.picks.includes(number);
+  const drawn = keno.drawn.includes(number);
+  const hit = selected && drawn;
+  const playable = keno.phase === "betting";
+  return `
+    <button class="keno-number ${selected ? "picked" : ""} ${drawn ? "drawn" : ""} ${hit ? "hit" : ""}" data-action="keno-pick" data-number="${number}" ${playable ? "" : "disabled"}>
+      ${number}
+    </button>
+  `;
+}
+
+function renderKenoResult() {
+  const keno = state.keno;
+  if (state.pendingReveal && state.pendingReveal.game === "keno") {
+    return `<div class="result-board pending"><div class="result-main">Drawing</div><div class="result-sub">Ten numbers are landing.</div></div>`;
+  }
+  if (keno.result) {
+    return `<div class="result-board ${keno.result.net > 0 ? "win" : keno.result.net < 0 ? "loss" : "idle"}"><div class="result-main">${escapeHtml(keno.result.title)}</div><div class="result-sub">${escapeHtml(keno.result.detail)}</div></div>`;
+  }
+  return `<div class="result-board idle"><div class="result-main">Keno</div><div class="result-sub">${escapeHtml(keno.message)}</div></div>`;
+}
+
+function renderPaidWalletTray() {
+  return `
+    <div class="wallet-tray">
+      <div class="wallet-strip"><span class="wallet-strip-label">Wallet</span><strong>$${formatMoney(state.wallet)}</strong></div>
+      <div class="chip-tray">${CHIP_VALUES.map((value) => renderTrayChip(value)).join("")}</div>
+    </div>
+  `;
+}
+
+function renderStackedChips(chips, className) {
+  if (!chips || !chips.length) return "";
+  return chips.map((value, index) => `
+    <div class="placed-chip ${className} chip-${chipClassForValue(value)}" style="left:${24 + index * 9}px;top:${24 + (index % 2) * 10}px">$${formatChipValue(value)}</div>
+  `).join("");
+}
+
 function renderMinesweeper() {
   const mines = state.minesweeper;
   return `
@@ -5732,7 +8303,7 @@ function renderMinesweeper() {
           <span class="wallet-strip-label">Wallet</span>
           <strong>$${formatMoney(state.wallet)}</strong>
         </div>
-        <div class="joku-free-note">Each safe tile is 1 point. Cash out before a mine takes the stack.</div>
+        <div class="joku-free-note">Each safe tile is 1 point. Clear every safe tile to cash out.</div>
       </div>
       ${renderPopup()}
     </section>

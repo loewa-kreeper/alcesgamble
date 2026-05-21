@@ -64,7 +64,12 @@ async function main() {
     const crash = JSON.parse(window.render_game_to_text()).crash;
     clearCrashBet();
 
-    return { roulette, blackjack, slots, baccarat, bus, plinko, crash };
+    placeKenoBet(15000);
+    placeKenoBet(1);
+    const keno = JSON.parse(window.render_game_to_text()).keno;
+    clearKenoBet();
+
+    return { roulette, blackjack, slots, baccarat, bus, plinko, crash, keno };
   });
 
   const rouletteTotal = caps.roulette.bets.reduce((sum, bet) => sum + bet.amount, 0);
@@ -77,6 +82,7 @@ async function main() {
     ["bus", caps.bus.wager, 20000, caps.bus.message],
     ["plinko", caps.plinko.wager, 25000, caps.plinko.message],
     ["crash", caps.crash.wager, 10000, caps.crash.message],
+    ["keno", caps.keno.wager, 15000, caps.keno.message],
   ].filter(([, actual, expected, message]) => actual !== expected || !message.startsWith("Max bet is $"));
 
   await browser.close();

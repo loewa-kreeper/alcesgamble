@@ -20,8 +20,9 @@ async function runCashoutAt(page, frames, shotName) {
   await page.locator('[data-action="crash-cashout"]').dispatchEvent("pointerdown", { bubbles: true });
   await stepVirtual(page, 4);
   await page.screenshot({ path: path.join(outDir, shotName), fullPage: true });
-  await stepVirtual(page, 65);
+  await stepVirtual(page, 125);
   const after = await page.evaluate(() => window.render_game_to_text());
+  await page.locator('[data-action="close-popup"]').first().click().catch(() => {});
   await page.locator('[data-action="go-menu"]').click();
   return { before, after };
 }
@@ -41,15 +42,15 @@ async function main() {
     const source = fs.readFileSync(path.join(projectDir, "game.js"), "utf8");
     const seeded = source
       .replace(/rouletteSpinActive: false,\r?\n  wallet: 0,/, "rouletteSpinActive: false,\n  wallet: 1000,")
-      .replace(/const MIN_CRASH_POINT = [^;]+;/, "const MIN_CRASH_POINT = 5;");
+      .replace(/function randomCrashPoint\(\) \{[\s\S]*?\n\}/, "function randomCrashPoint() {\n  return 5;\n}");
     await route.fulfill({ status: 200, contentType: "application/javascript", body: seeded });
   });
 
   await page.goto("http://127.0.0.1:8003", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(300);
 
-  const early = await runCashoutAt(page, 4, "early.png");
-  const later = await runCashoutAt(page, 125, "later.png");
+  const early = await runCashoutAt(page, 170, "early.png");
+  const later = await runCashoutAt(page, 240, "later.png");
 
   fs.writeFileSync(path.join(outDir, "early-before.json"), early.before);
   fs.writeFileSync(path.join(outDir, "early-after.json"), early.after);

@@ -24,7 +24,9 @@ async function main() {
 
   await page.route("**/game.js", async (route) => {
     const source = fs.readFileSync(path.join(projectDir, "game.js"), "utf8");
-    const seeded = source.replace(/rouletteSpinActive: false,\r?\n  wallet: 0,/, "rouletteSpinActive: false,\n  wallet: 100,");
+    const seeded = source
+      .replace(/rouletteSpinActive: false,\r?\n  wallet: 0,/, "rouletteSpinActive: false,\n  wallet: 100,")
+      .replace(/function randomCrashPoint\(\) \{[\s\S]*?\n\}/, "function randomCrashPoint() {\n  return 5;\n}");
     await route.fulfill({ status: 200, contentType: "application/javascript", body: seeded });
   });
 
@@ -45,11 +47,11 @@ async function main() {
   await page.locator('[data-action="open-crash"]').click();
   await page.locator('[data-action="crash-bet"]').click();
   await page.locator('[data-action="crash-start"]').click();
-  await stepVirtual(page, 4);
+  await stepVirtual(page, 170);
   await page.locator('[data-action="crash-cashout"]').click().catch(() => {});
   await stepVirtual(page, 20);
   await page.screenshot({ path: path.join(outDir, "crash-cashout.png"), fullPage: true });
-  await stepVirtual(page, 49);
+  await stepVirtual(page, 110);
   await page.screenshot({ path: path.join(outDir, "crash.png"), fullPage: true });
   const crashState = await page.evaluate(() => window.render_game_to_text());
   await page.locator('[data-action="close-popup"]').first().click().catch(() => {});
@@ -57,7 +59,6 @@ async function main() {
 
   await page.locator('[data-action="open-minesweeper"]').click();
   await page.locator('[data-action="minesweeper-reveal"][data-index="40"]').click();
-  await page.locator('[data-action="minesweeper-cashout"]').click();
   await page.screenshot({ path: path.join(outDir, "minesweeper.png"), fullPage: true });
   const minesweeperState = await page.evaluate(() => window.render_game_to_text());
 
