@@ -1,5 +1,14 @@
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const CHIP_VALUES = [1, 5, 10, 25, 100, 500];
+const MAX_BETS = {
+  roulette: 20000,
+  blackjack: 50000,
+  slots: 5000,
+  baccarat: 20000,
+  bus: 20000,
+  plinko: 25000,
+  crash: 10000,
+};
 const numberSequence = Array.from({ length: 36 }, (_, index) => index + 1);
 const TABLE_ASPECT = 1790 / 887;
 const XP_PER_ROUND = 20;
@@ -30,8 +39,9 @@ const PLINKO_ROWS = 16;
 const PLINKO_MULTIPLIERS = [10, 5, 3, 2, 1, 0.8, 0.5, 0.2, 0, 0.2, 0.5, 0.8, 1, 2, 3, 5, 10];
 const CRASH_GROWTH_PER_TICK = 0.035;
 const CRASH_TICK_MS = 120;
-const CRASH_HOUSE_RETURN = 0.94;
-const MIN_CRASH_POINT = 1.35;
+const CRASH_CASHOUT_COUNTDOWN_MS = 1000;
+const CRASH_HOUSE_RETURN = 0.9;
+const MIN_CRASH_POINT = 0.9;
 const MINESWEEPER_ROWS = 9;
 const MINESWEEPER_COLS = 9;
 const MINESWEEPER_MINES = 10;
@@ -177,6 +187,7 @@ const state = {
     multiplier: 0,
     crashPoint: 0,
     cashedOutAt: 0,
+    cashoutCountdownMs: 0,
     result: null,
     message: "Place a wager and launch.",
   },
@@ -1296,6 +1307,14 @@ function sanitizeMoney(value) {
   return Math.max(0, Math.round(parsed * 100) / 100);
 }
 
+function exceedsMaxBet(game, currentTotal, amount) {
+  return sanitizeMoney(currentTotal) + sanitizeMoney(amount) > MAX_BETS[game];
+}
+
+function maxBetMessage(game) {
+  return `Max bet is $${formatMoney(MAX_BETS[game])}.`;
+}
+
 function formatMoney(value) {
   return value.toFixed(2);
 }
@@ -1797,6 +1816,12 @@ function placeBet(betId, amount) {
     return;
   }
 
+  if (exceedsMaxBet("roulette", getTableTotal(), betAmount)) {
+    state.spinMessage = maxBetMessage("roulette");
+    render();
+    return;
+  }
+
   if (betAmount > state.wallet) {
     state.spinMessage = "Not enough in the wallet.";
     render();
@@ -1842,6 +1867,11 @@ function repeatBets() {
   }
 
   const total = state.lastRoundTemplate.reduce((sum, bet) => sum + bet.amount, 0);
+  if (total > MAX_BETS.roulette) {
+    state.spinMessage = maxBetMessage("roulette");
+    render();
+    return;
+  }
   if (total > state.wallet) {
     state.spinMessage = "Wallet is too light for repeat.";
     render();
@@ -3089,6 +3119,11 @@ function placeBlackjackBet(amount) {
 
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("blackjack", bj.wager, chip)) {
+    bj.message = maxBetMessage("blackjack");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     bj.message = "Not enough in the wallet.";
     render();
@@ -3123,6 +3158,11 @@ function clearBlackjackBet() {
 function repeatBlackjackBet() {
   const bj = state.blackjack;
   if (!["betting", "round-over"].includes(bj.phase) || !bj.lastWager) return;
+  if (bj.lastWager > MAX_BETS.blackjack) {
+    bj.message = maxBetMessage("blackjack");
+    render();
+    return;
+  }
   if (bj.lastWager > state.wallet) {
     bj.message = "Wallet is too light for repeat.";
     render();
@@ -3147,7 +3187,7 @@ function canDealBlackjack() {
 
 function canDoubleBlackjack() {
   const bj = state.blackjack;
-  return bj.phase === "player-turn" && bj.player.length === 2 && state.wallet >= bj.wager;
+  return bj.phase === "player-turn" && bj.player.length === 2 && state.wallet >= bj.wager && bj.wager * 2 <= MAX_BETS.blackjack;
 }
 
 function canRepeatBlackjack() {
@@ -3188,6 +3228,11 @@ function placePlinkoBet(amount) {
   }
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("plinko", plinko.wager, chip)) {
+    plinko.message = maxBetMessage("plinko");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     plinko.message = "Not enough in the wallet.";
     render();
@@ -3218,6 +3263,11 @@ function clearPlinkoBet() {
 function repeatPlinkoBet() {
   const plinko = state.plinko;
   if (!canRepeatPlinko()) return;
+  if (plinko.lastWager > MAX_BETS.plinko) {
+    plinko.message = maxBetMessage("plinko");
+    render();
+    return;
+  }
   if (plinko.lastWager > state.wallet) {
     plinko.message = "Wallet is too light for repeat.";
     render();
@@ -3376,6 +3426,11 @@ function placeCrashBet(amount) {
   }
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("crash", crash.wager, chip)) {
+    crash.message = maxBetMessage("crash");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     crash.message = "Not enough in the wallet.";
     render();
@@ -3404,6 +3459,11 @@ function clearCrashBet() {
 function repeatCrashBet() {
   const crash = state.crash;
   if (!canRepeatCrash()) return;
+  if (crash.lastWager > MAX_BETS.crash) {
+    crash.message = maxBetMessage("crash");
+    render();
+    return;
+  }
   if (crash.lastWager > state.wallet) {
     crash.message = "Wallet is too light for repeat.";
     render();
@@ -3430,6 +3490,7 @@ function startCrashRound() {
   crash.multiplier = 0;
   crash.crashPoint = randomCrashPoint();
   crash.cashedOutAt = 0;
+  crash.cashoutCountdownMs = 0;
   crash.result = null;
   crash.message = "Multiplier is climbing.";
   state.popup = null;
@@ -3450,9 +3511,9 @@ function randomCrashPoint() {
 
 function scheduleCrashTick() {
   const crash = state.crash;
-  if (crash.phase !== "flying") return;
+  if (!isCrashFlying()) return;
   scheduleUiTask(() => {
-    if (crash.phase !== "flying") return;
+    if (!isCrashFlying()) return;
     const climb = crash.multiplier < 1
       ? 0.08
       : CRASH_GROWTH_PER_TICK * Math.max(1, crash.multiplier * 0.55);
@@ -3461,7 +3522,11 @@ function scheduleCrashTick() {
       finishCrashLoss();
       return;
     }
-    crash.message = `Flying at ${formatMultiplier(crash.multiplier)}.`;
+    if (crash.phase === "landing") {
+      crash.message = "Cash out landing...";
+    } else {
+      crash.message = `Flying at ${formatMultiplier(crash.multiplier)}.`;
+    }
     render();
     scheduleCrashTick();
   }, CRASH_TICK_MS);
@@ -3470,13 +3535,40 @@ function scheduleCrashTick() {
 function cashOutCrash() {
   const crash = state.crash;
   if (crash.phase !== "flying") return;
-  clearPendingPopupTimer();
+  crash.phase = "landing";
+  crash.cashoutCountdownMs = CRASH_CASHOUT_COUNTDOWN_MS;
+  crash.message = "Cash out landing in 1 second.";
+  state.pendingReveal = {
+    game: "crash",
+    title: "Landing",
+    detail: "Cash out in 1 second.",
+  };
+  render();
+  scheduleCrashCashoutCountdown();
+}
+
+function isCrashFlying() {
+  return state.crash.phase === "flying" || state.crash.phase === "landing";
+}
+
+function scheduleCrashCashoutCountdown() {
+  scheduleUiTask(() => {
+    const crash = state.crash;
+    if (crash.phase !== "landing") return;
+    settleCrashCashout();
+  }, CRASH_CASHOUT_COUNTDOWN_MS);
+}
+
+function settleCrashCashout() {
+  const crash = state.crash;
+  if (crash.phase !== "landing") return;
   const payout = Math.round(crash.wager * crash.multiplier * 100) / 100;
   const net = Math.round((payout - crash.wager) * 100) / 100;
   adjustWallet(payout);
   awardRoundXp("Crash");
   crash.phase = "betting";
   crash.cashedOutAt = crash.multiplier;
+  crash.cashoutCountdownMs = 0;
   const tone = net > 0 ? "win" : net < 0 ? "loss" : "idle";
   crash.result = {
     tone,
@@ -3503,6 +3595,7 @@ function finishCrashLoss() {
   awardRoundXp("Crash");
   crash.phase = "betting";
   crash.multiplier = crash.crashPoint;
+  crash.cashoutCountdownMs = 0;
   crash.result = {
     tone: "loss",
     title: `Crashed ${formatMultiplier(crash.crashPoint)}`,
@@ -3529,6 +3622,7 @@ function prepareCrashNextRound() {
   crash.multiplier = 0;
   crash.crashPoint = 0;
   crash.cashedOutAt = 0;
+  crash.cashoutCountdownMs = 0;
   state.popup = null;
   state.pendingReveal = null;
 }
@@ -3727,6 +3821,11 @@ function placeSlotBet(amount) {
 
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("slots", slot.wager, chip)) {
+    slot.message = maxBetMessage("slots");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     slot.message = "Not enough in the wallet.";
     render();
@@ -3760,6 +3859,11 @@ function clearSlotBet() {
 function repeatSlotBet() {
   const slot = state.slot;
   if (slot.phase !== "betting" || !slot.lastWager) return;
+  if (slot.lastWager > MAX_BETS.slots) {
+    slot.message = maxBetMessage("slots");
+    render();
+    return;
+  }
   if (slot.lastWager > state.wallet) {
     slot.message = "Wallet is too light for repeat.";
     render();
@@ -4134,6 +4238,7 @@ window.render_game_to_text = () => JSON.stringify({
   },
   selectedAmount: state.selectedAmount,
   selectedBetId: state.selectedBetId,
+  maxBets: MAX_BETS,
   hoverBetId: state.hoverBetId,
   bets: state.bets,
   lastSpin: state.lastSpin,
@@ -4205,6 +4310,7 @@ window.render_game_to_text = () => JSON.stringify({
     multiplier: state.crash.multiplier,
     crashPoint: state.crash.crashPoint,
     cashedOutAt: state.crash.cashedOutAt,
+    cashoutCountdownMs: state.crash.cashoutCountdownMs,
     result: state.crash.result,
     message: state.crash.message,
   },
@@ -4865,6 +4971,11 @@ function placeBaccaratBet(side, amount) {
   if (!["player", "dealer", "tie"].includes(betSide)) return;
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("baccarat", totalBaccaratBets(), chip)) {
+    baccarat.message = maxBetMessage("baccarat");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     baccarat.message = "Not enough in the wallet.";
     render();
@@ -4901,6 +5012,11 @@ function repeatBaccaratBets() {
   const baccarat = state.baccarat;
   if (baccarat.phase !== "betting" || !totalBaccaratLastBets()) return;
   const lastTotal = totalBaccaratLastBets();
+  if (lastTotal > MAX_BETS.baccarat) {
+    baccarat.message = maxBetMessage("baccarat");
+    render();
+    return;
+  }
   if (lastTotal > state.wallet) {
     baccarat.message = "Wallet is too light for repeat.";
     render();
@@ -5213,6 +5329,11 @@ function placeRideTheBusBet(amount) {
 
   const chip = sanitizeMoney(amount);
   if (chip <= 0) return;
+  if (exceedsMaxBet("bus", bus.wager, chip)) {
+    bus.message = maxBetMessage("bus");
+    render();
+    return;
+  }
   if (chip > state.wallet) {
     bus.message = "Not enough in the wallet.";
     render();
@@ -5507,12 +5628,13 @@ function renderCrash() {
           </button>
           <div class="crash-sky">
             <div class="crash-grid-lines"></div>
-            <div class="crash-plane ${crash.phase === "flying" ? "flying" : crash.phase === "crashed" ? "crashed" : ""}" style="--crash-progress:${Math.max(0, Math.min(1, crash.multiplier / 6))}"></div>
+            <div class="crash-plane ${isCrashFlying() ? "flying" : crash.phase === "crashed" ? "crashed" : ""}" style="--crash-progress:${Math.max(0, Math.min(1, crash.multiplier / 6))}"></div>
             <div class="crash-multiplier">${formatMultiplier(crash.multiplier)}</div>
+            ${crash.phase === "landing" ? `<div class="crash-countdown">Landing ${Math.ceil(crash.cashoutCountdownMs / 1000)}s</div>` : ""}
           </div>
           <div class="crash-controls">
             <button class="pixel-button green" data-action="crash-start" ${canStartCrash() ? "" : "disabled"}>Launch</button>
-            <button class="pixel-button gold" data-action="crash-cashout" ${crash.phase === "flying" ? "" : "disabled"}>Cash Out</button>
+            <button class="pixel-button gold" data-action="crash-cashout" ${crash.phase === "flying" ? "" : "disabled"}>${crash.phase === "landing" ? "Landing..." : "Cash Out"}</button>
             <button class="pixel-button red" data-action="crash-clear" ${crash.phase === "betting" && crash.wager ? "" : "disabled"}>Clear</button>
             <button class="pixel-button" data-action="crash-repeat" ${canRepeatCrash() ? "" : "disabled"}>Repeat</button>
           </div>

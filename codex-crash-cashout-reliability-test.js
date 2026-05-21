@@ -20,6 +20,7 @@ async function runCashoutAt(page, frames, shotName) {
   await page.locator('[data-action="crash-cashout"]').dispatchEvent("pointerdown", { bubbles: true });
   await stepVirtual(page, 4);
   await page.screenshot({ path: path.join(outDir, shotName), fullPage: true });
+  await stepVirtual(page, 65);
   const after = await page.evaluate(() => window.render_game_to_text());
   await page.locator('[data-action="go-menu"]').click();
   return { before, after };
@@ -40,7 +41,7 @@ async function main() {
     const source = fs.readFileSync(path.join(projectDir, "game.js"), "utf8");
     const seeded = source
       .replace(/rouletteSpinActive: false,\r?\n  wallet: 0,/, "rouletteSpinActive: false,\n  wallet: 1000,")
-      .replace("const MIN_CRASH_POINT = 1.35;", "const MIN_CRASH_POINT = 5;");
+      .replace(/const MIN_CRASH_POINT = [^;]+;/, "const MIN_CRASH_POINT = 5;");
     await route.fulfill({ status: 200, contentType: "application/javascript", body: seeded });
   });
 

@@ -47,7 +47,9 @@ async function main() {
   await page.locator('[data-action="crash-start"]').click();
   await stepVirtual(page, 4);
   await page.locator('[data-action="crash-cashout"]').click().catch(() => {});
-  await stepVirtual(page, 10);
+  await stepVirtual(page, 20);
+  await page.screenshot({ path: path.join(outDir, "crash-cashout.png"), fullPage: true });
+  await stepVirtual(page, 49);
   await page.screenshot({ path: path.join(outDir, "crash.png"), fullPage: true });
   const crashState = await page.evaluate(() => window.render_game_to_text());
   await page.locator('[data-action="close-popup"]').first().click().catch(() => {});
